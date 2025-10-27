@@ -1,0 +1,44 @@
+# requirements.in (Version 3 - Surgical & Explicit)
+
+# --- Core Web Framework & Server ---
+Flask
+gunicorn
+
+# --- Data Manipulation & Querying ---
+polars
+duckdb
+pandas
+numpy
+
+# --- Asynchronous Task Queue ---
+redis
+rq
+watchgod
+
+# --- Database Drivers & File I/O ---
+SQLAlchemy
+pyarrow
+python-dotenv
+psycopg2-binary
+mysql-connector-python
+xlsxwriter
+
+# --- Authentication & APIs ---
+supabase
+google-generativeai
+
+# --- Machine Learning & Data Profiling ---
+# We specify PyCaret's core package, and then the other major libraries
+# we are actually using. This is MUCH easier for the resolver.
+pycaret==3.3.2
+scikit-learn
+scipy
+matplotlib
+seaborn
+category_encoders
+annoy
+memory-profiler
+colormap
+
+# --- System & Utilities ---
+psutil

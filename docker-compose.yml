@@ -1,0 +1,65 @@
+# This file orchestrates all the services needed to run the application.
+# It is now configured to support both local development and production builds.
+
+services:
+  # The Flask Web Application Service
+  web:
+    build: .
+    ports:
+      - "5000:5000" # Exposes the web server to localhost:5000
+    environment:
+      # These values will be loaded from a .env file on the host machine.
+      # When running inside Docker, REDIS_URL uses the service name 'redis'.
+      - FLASK_ENV=production
+      - SUPABASE_URL=${SUPABASE_URL}
+      - SUPABASE_KEY=${SUPABASE_KEY}
+      - SUPABASE_SERVICE_KEY=${SUPABASE_SERVICE_KEY}
+      - FLASK_SECRET_KEY=${FLASK_SECRET_KEY}
+      - REDIS_URL=redis://redis:6379/0
+      - PYCARET_CUSTOM_LOGGING_LEVEL=CRITICAL
+    volumes:
+      # Maps the 'shared_data' volume to the user's home directory inside the container.
+      - shared_data:/home/appuser/shared_data
+    depends_on:
+      - redis
+    restart: always # Ensures the service restarts automatically if it stops.
+
+  # The RQ Background Worker Service
+  worker:
+    build: .
+    command: python worker.py
+    environment:
+      # The worker also uses the 'redis' service name to connect inside Docker.
+      - SUPABASE_URL=${SUPABASE_URL}
+      - SUPABASE_KEY=${SUPABASE_KEY}
+      - SUPABASE_SERVICE_KEY=${SUPABASE_SERVICE_KEY}
+      - REDIS_URL=redis://redis:6379/0
+      - PYCARET_CUSTOM_LOGGING_LEVEL=CRITICAL
+    volumes:
+      # The worker MUST have access to the exact same shared data volume.
+      - shared_data:/home/appuser/shared_data
+    depends_on:
+      - redis
+    restart: always # Ensures the worker also restarts automatically.
+
+  # The Redis Service for the job queue
+  redis:
+    image: "redis:alpine"
+    # --- THIS IS THE KEY FIX ---
+    # This line exposes the container's internal port 6379 to your host machine's
+    # port 6379 (localhost:6379). This is what allows your local `rq worker`
+    # and `flask run` processes to connect to the Redis container.
+    ports:
+      - "6379:6379"
+    restart: always # Ensures Redis restarts automatically.
+
+# Define the named volume that enables data sharing and persistence.
+volumes:
+  shared_data:
+    driver: local
+    driver_opts:
+      type: 'none'
+      # This binds the volume to a folder on the host machine, specified
+      # by the SHARED_FOLDER_PATH variable in the .env file.
+      o: bind
+      device: ${SHARED_FOLDER_PATH}

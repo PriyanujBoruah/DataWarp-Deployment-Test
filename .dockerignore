@@ -1,0 +1,24 @@
+# .dockerignore
+
+# Docker build artifacts
+*.tar.gz
+*.tar
+*.zip
+
+# Python virtual environment
+.venv
+venv
+
+# IDE and OS files
+.vscode
+.idea
+__pycache__
+*.pyc
+.DS_Store
+
+# Local shared data folder used for testing
+local_shared_data
+
+# Any local SQLite databases if you have them
+*.db
+*.sqlite3

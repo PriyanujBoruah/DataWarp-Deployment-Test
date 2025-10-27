@@ -1,0 +1,56 @@
+# docker-compose.client.yml
+# This is the file you will send to your client.
+
+services:
+  # The Flask Web Application Service
+  web:
+    # The client's Docker will use the pre-built image, not build it.
+    image: datacleaningplatform-web:latest
+    ports:
+      - "5000:5000"
+    environment:
+      - GUNICORN_WORKERS=${GUNICORN_WORKERS:-4}
+      - FLASK_ENV=production
+      - SUPABASE_URL=${SUPABASE_URL}
+      - SUPABASE_KEY=${SUPABASE_KEY}
+      - SUPABASE_SERVICE_KEY=${SUPABASE_SERVICE_KEY}
+      - FLASK_SECRET_KEY=${FLASK_SECRET_KEY}
+      - REDIS_URL=redis://redis:6379/0
+      - PYCARET_CUSTOM_LOGGING_LEVEL=CRITICAL
+    volumes:
+      - shared_data:/home/appuser/shared_data
+    depends_on:
+      - redis
+    restart: always # Good practice for production
+
+  # The RQ Background Worker Service
+  worker:
+    # The client's Docker will also use the pre-built image.
+    image: datacleaningplatform-web:latest
+    command: python worker.py
+    environment:
+      - SUPABASE_URL=${SUPABASE_URL}
+      - SUPABASE_KEY=${SUPABASE_KEY}
+      - SUPABASE_SERVICE_KEY=${SUPABASE_SERVICE_KEY}
+      - REDIS_URL=redis://redis:6379/0
+      - PYCARET_CUSTOM_LOGGING_LEVEL=CRITICAL
+    volumes:
+      - shared_data:/home/appuser/shared_data
+    depends_on:
+      - redis
+    restart: always # Good practice for production
+
+  # The Redis Service for the job queue
+  redis:
+    image: "redis:alpine"
+    restart: always # Good practice for production
+
+# Define the named volume that enables collaboration
+volumes:
+  shared_data:
+    driver: local
+    driver_opts:
+      type: 'none'
+      o: bind
+      # The client configures this path in their .env file
+      device: ${SHARED_FOLDER_PATH}

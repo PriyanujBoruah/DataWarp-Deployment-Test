@@ -1,0 +1,26 @@
+/data-cleaning-platform
+|
+|-- run.py
+|
+|-- /app/
+|   |-- __init__.py
+|   |-- routes.py
+|   |
+|   |-- /static/
+|   |   |-- /js/
+|   |   |   |-- /cleaner_panels/
+|   |   |   |   |-- encoding.js
+|   |   |   |   |-- missing_values.js
+|   |   |   |   |-- outliers.js
+|   |   |   |   |-- scaling.js
+|   |
+|   |-- /templates/
+|   |   |-- base.html
+|   |   |-- cleaner.html
+|   |   |-- columns.html
+|   |   |-- formulate.html
+|   |   |-- full_report.html
+|   |   |-- preview.html
+|   |   |-- sql.html
+|   |   |-- upload.html
+|   |   |-- visualizations.html
