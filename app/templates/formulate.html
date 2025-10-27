@@ -1,0 +1,346 @@
+{% extends "base.html" %}
+
+{% block title %}Formulate Columns{% endblock %}
+
+{% block head_content %}
+    <script src="https://unpkg.com/ag-grid-community/dist/ag-grid-community.min.js"></script>
+    <style>
+        /* AG Grid Dark Theme */
+        .ag-theme-alpine-dark {
+            --ag-font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            --ag-background-color: #121212;
+            --ag-foreground-color: #E0D9F0;
+            --ag-border-color: #2e2e2e;
+            --ag-header-background-color: #1f1f1f;
+            --ag-header-foreground-color: #FFFFFF;
+            --ag-row-background-color: #171717;
+            --ag-row-hover-color: #2C2541;
+            --ag-odd-row-background-color: #171717;
+            --ag-icon-color: #a095c0;
+            --ag-range-selection-border-color: #9D4EDD;
+            --ag-range-selection-background-color: rgba(157, 78, 221, 0.2);
+            --ag-selected-row-background-color: rgba(157, 78, 221, 0.25);
+            --ag-modal-overlay-background-color: rgba(30, 25, 43, 0.6);
+            --ag-input-wrapper-background-color: #1E192B;
+        }
+        .ag-root-wrapper { border-color: #2e2e2e !important; border-radius: 0px !important; }
+
+        .sidebar-top, .sidebar-bottom, .ag-body-vertical-scroll-viewport, .ag-body-horizontal-scroll-viewport { scrollbar-width: thin; scrollbar-color: #313131 #171717; }
+
+        .formulate-layout { display: flex; height: 100%; overflow: hidden; }
+
+        /* --- Left Sidebar (Formula Panel) --- */
+        .formula-sidebar {
+            width: 320px;
+            flex-shrink: 0;
+            background-color: #171717;
+            border-right: 1px solid #2e2e2e;
+            display: flex;
+            flex-direction: column;
+            height: 100%;
+        }
+        
+        /* Sidebar Top: Formula Library */
+        .sidebar-top {
+            flex-grow: 1; /* Takes up available space */
+            padding: 20px;
+            overflow-y: auto;
+            min-height: 0;
+            border-bottom: 1px solid #2e2e2e;
+        }
+        .sidebar-top h4 { margin: 0 0 15px 0; color: #FFFFFF; }
+        .formula-list { display: flex; flex-direction: column; gap: 8px; }
+        .formula-item {
+            padding: 12px; background-color: #1f1f1f; border-radius: 8px;
+            color: #E0D9F0; cursor: pointer; transition: background-color 0.2s;
+            border: 1px solid #2e2e2e;
+        }
+        .formula-item:hover { background-color: #2e2e2e; }
+        .formula-item.active { background-color: #2e2e2e; border-color: #FFF; }
+        .formula-item .name { font-weight: 500; color: #b4b4b4; }
+        .formula-item .desc { font-size: 12px; color: #898989; margin-top: 4px; }
+        .formula-item.active .desc { color: #e0d9f0; }
+
+        /* Sidebar Bottom: Configuration Panel */
+        .sidebar-bottom {
+            flex-shrink: 0;
+            height: 45%; /* Increased height for more complex formulas */
+            padding: 20px;
+            overflow-y: auto;
+        }
+        .sidebar-bottom h4 { margin: 0 0 15px 0; color: #FFFFFF; }
+        .control-group { margin-bottom: 20px; }
+        .control-group label { font-size: 12px; font-weight: 500; color: #a095c0; display: block; margin-bottom: 8px; }
+        .control-group select, .control-group input {
+            width: 100%; padding: 8px; border-radius: 5px; border: 1px solid #363636;
+            background-color: #1f1f1f; color: #fafafa; box-sizing: border-box;
+        }
+        .apply-op-btn {
+            width: 100%; padding: 10px; background-color: #1E192B; color: #9D4EDD; border: 1px solid #9D4EDD;
+            border-radius: 8px; font-size: 0.7em; font-weight: 500; cursor: pointer;
+            transition: background-color 0.2s; margin-top: 10px;
+        }
+        .apply-op-btn:hover { background-color: #9D4EDD; color: #fff; }
+        .status-message { text-align: center; color: #a095c0; font-size: 14px; margin-top: 15px; }
+        .checklist-container { max-height: 150px; overflow-y: auto; border: 1px solid #363636; background-color: #1f1f1f; border-radius: 5px; padding: 10px; }
+        .checklist-item { display: flex; align-items: center; margin-bottom: 8px; }
+        .checklist-item input { width: 16px; height: 16px; margin-right: 10px; }
+        .checklist-item label { color: #E0D9F0; font-weight: normal; }
+
+
+        /* --- Main Content (Grid) --- */
+        .formulate-main { flex-grow: 1; display: flex; flex-direction: column; overflow: hidden; }
+        #myGrid { width: 100%; height: 100%; }
+
+    </style>
+{% endblock %}
+
+{% block content %}
+<div class="formulate-layout">
+    <aside class="formula-sidebar">
+        <div class="sidebar-top">
+            <h4>Formula Library</h4>
+            <div class="formula-list" id="formula-list">
+                <!-- Formulas will be populated by JS -->
+            </div>
+        </div>
+        <div class="sidebar-bottom" id="config-panel">
+            <!-- Config controls will be rendered here -->
+        </div>
+    </aside>
+    <main class="formulate-main">
+        <!-- AG Grid replaces the old table -->
+        <div id="myGrid" class="ag-theme-alpine-dark"></div>
+    </main>
+</div>
+{% endblock %}
+
+{% block body_scripts %}
+<script>
+    document.addEventListener('DOMContentLoaded', () => {
+        const formulaList = document.getElementById('formula-list');
+        const configPanel = document.getElementById('config-panel');
+        const gridDiv = document.querySelector('#myGrid');
+        let columnsWithTypes = [];
+        
+        // --- AG Grid Setup ---
+        let gridApi;
+        const gridOptions = {
+            defaultColDef: { sortable: true, filter: true, resizable: true, minWidth: 150 },
+            rowModelType: 'infinite',
+            cacheBlockSize: 100,
+            maxBlocksInCache: 10,
+            // Add this line to treat field names with dots as a single key
+            suppressFieldDotNotation: true,
+            onGridReady: (params) => {
+                gridApi = params.api;
+                // Initialize the data source after the grid is ready
+                initializeGridDataSource();
+            }
+        };
+        agGrid.createGrid(gridDiv, gridOptions);
+
+        async function initializeGridDataSource() {
+            try {
+                const response = await fetch('/get_schema_details');
+                const data = await response.json();
+                if (data.error || !data.columns) throw new Error(data.error || 'Invalid schema format.');
+                
+                const columnDefs = data.columns.map(p => ({
+                    field: p.name,
+                    headerName: p.name,
+                    filter: ['BIGINT', 'DOUBLE', 'INTEGER', 'FLOAT', 'DECIMAL'].some(type => p.type.includes(type))
+                        ? 'agNumberColumnFilter' : 'agTextColumnFilter',
+                }));
+                gridApi.setGridOption('columnDefs', columnDefs);
+
+                const dataSource = {
+                    getRows: (params) => {
+                        // Use the server-side endpoint for AG Grid
+                        fetch('/get_ag_grid_serverside_rows', {
+                            method: 'POST', headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify(params) // Pass sorting/filtering from the grid
+                        })
+                        .then(res => res.json())
+                        .then(data => data.error ? params.failCallback() : params.successCallback(data.rows, data.lastRow))
+                        .catch(() => params.failCallback());
+                    }
+                };
+                gridApi.setGridOption('datasource', dataSource);
+            } catch (error) {
+                console.error("Failed to initialize grid:", error);
+                // Optionally show an error overlay on the grid
+                if(gridApi) gridApi.showNoRowsOverlay();
+            }
+        }
+        // --- END AG Grid Setup ---
+
+        const FORMULA_LIBRARY = {
+            "Text: Cleaning & Case": [ { id: 'to_upper', name: 'To Uppercase', desc: 'Convert text to UPPERCASE.', signature: 'text_single_no_param' }, { id: 'to_lower', name: 'To Lowercase', desc: 'Convert text to lowercase.', signature: 'text_single_no_param' }, { id: 'to_title', name: 'To Title Case', desc: 'Convert text to Title Case.', signature: 'text_single_no_param' }, { id: 'trim_whitespace', name: 'Trim Whitespace', desc: 'Remove leading/trailing spaces.', signature: 'text_single_no_param' }, ],
+            "Text: Extraction & Slicing": [ { id: 'len_chars', name: 'Get Length', desc: 'Count the number of characters.', signature: 'text_single_no_param' }, { id: 'slice', name: 'Get Substring', desc: 'Extract characters by position.', signature: 'text_single_two_param', param_labels: ['Start Position', 'Length (optional)'], param_types: ['number', 'number'], param_defaults: [0, ''] }, { id: 'extract_regex', name: 'Extract with Regex', desc: 'Extract a pattern from text.', signature: 'text_single_one_param', param_label: 'Regex Pattern', param_type: 'text', param_default: '(\\d+)' }, { id: 'split_get', name: 'Get Nth Part by Delimiter', desc: 'Split text and get one part.', signature: 'text_single_two_param', param_labels: ['Delimiter', 'Part Number (0-indexed)'], param_types: ['text', 'number'], param_defaults: [' ', 0] }, ],
+            "Text: Search & Replace": [ { id: 'replace_literal', name: 'Replace Substring', desc: 'Replace a piece of text with another.', signature: 'text_single_two_param', param_labels: ['Find', 'Replace With'], param_types: ['text', 'text'], param_defaults: ['', ''] }, { id: 'replace_regex', name: 'Replace with Regex', desc: 'Replace a pattern with text.', signature: 'text_single_two_param', param_labels: ['Regex Pattern', 'Replace With'], param_types: ['text', 'text'], param_defaults: ['[^a-zA-Z]', ''] }, ],
+            "Text: Multi-Column": [ { id: 'concatenate', name: 'Concatenate Columns', desc: 'Join multiple text columns.', signature: 'text_multi_many' }, ],
+            "Numeric: Basic Arithmetic": [ { id: 'add_constant', name: 'Add a Constant', desc: 'Add a number to each value.', signature: 'numeric_single_param', param_label: 'Value to Add', param_type: 'number', param_default: 10 }, { id: 'subtract_constant', name: 'Subtract a Constant', desc: 'Subtract a number from each value.', signature: 'numeric_single_param', param_label: 'Value to Subtract', param_type: 'number', param_default: 10 }, { id: 'multiply_by', name: 'Multiply by a Constant', desc: 'Multiply each value by a number.', signature: 'numeric_single_param', param_label: 'Value to Multiply By', param_type: 'number', param_default: 1.1 }, { id: 'divide_by', name: 'Divide by a Constant', desc: 'Divide each value by a number.', signature: 'numeric_single_param', param_label: 'Value to Divide By', param_type: 'number', param_default: 2 }, { id: 'power', name: 'Raise to Power', desc: 'Raise values to a power.', signature: 'numeric_single_param', param_label: 'Exponent', param_type: 'number', param_default: 2 }, ],
+            "Numeric: Rounding & Sign": [ { id: 'round', name: 'Round Number', desc: 'Round to N decimal places.', signature: 'numeric_single_param', param_label: 'Decimal Places', param_type: 'number', param_default: 0 }, { id: 'floor', name: 'Floor (Round Down)', desc: 'Round down to the nearest integer.', signature: 'numeric_single_no_param' }, { id: 'ceil', name: 'Ceiling (Round Up)', desc: 'Round up to the nearest integer.', signature: 'numeric_single_no_param' }, { id: 'abs', name: 'Absolute Value', desc: 'Get the absolute value of a number.', signature: 'numeric_single_no_param' }, ],
+            "Numeric: Log & Exponential": [ { id: 'log', name: 'Natural Log (ln)', desc: 'Log transform for skewed data.', signature: 'numeric_single_no_param' }, { id: 'log10', name: 'Log Base 10', desc: 'Log10 transform for skewed data.', signature: 'numeric_single_no_param' }, { id: 'exp', name: 'Exponential (e^x)', desc: 'Inverse of natural log.', signature: 'numeric_single_no_param' }, ],
+            "Numeric: Trigonometry": [ { id: 'sin', name: 'Sine (sin)', desc: 'Sine of the value (in radians).', signature: 'numeric_single_no_param' }, { id: 'cos', name: 'Cosine (cos)', desc: 'Cosine of the value (in radians).', signature: 'numeric_single_no_param' }, { id: 'tan', name: 'Tangent (tan)', desc: 'Tangent of the value (in radians).', signature: 'numeric_single_no_param' }, ],
+            "Numeric: Multi-Column Arithmetic": [ { id: 'add_cols', name: 'Add Two Columns', desc: 'e.g., [Price] + [Tax]', signature: 'numeric_multi_two' }, { id: 'subtract_cols', name: 'Subtract Two Columns', desc: 'e.g., [Revenue] - [Cost]', signature: 'numeric_multi_two' }, { id: 'multiply_cols', name: 'Multiply Two Columns', desc: 'e.g., [Price] * [Quantity]', signature: 'numeric_multi_two' }, { id: 'divide_cols', name: 'Divide Two Columns', desc: 'e.g., [Cost] / [Units]', signature: 'numeric_multi_two' }, ],
+            "Numeric: Row-wise Aggregations": [ { id: 'row_sum', name: 'Row-wise Sum', desc: 'Sum values across multiple columns.', signature: 'numeric_multi_many' }, { id: 'row_mean', name: 'Row-wise Average', desc: 'Average values across columns.', signature: 'numeric_multi_many' }, { id: 'row_max', name: 'Row-wise Maximum', desc: 'Find the max value across columns.', signature: 'numeric_multi_many' }, ]
+        };
+        
+        // This function no longer needs to update a table, just get column info
+        async function initializeView() {
+            try {
+                const response = await fetch('/get_schema_details');
+                const data = await response.json();
+                if (data.error) throw new Error(data.error);
+                columnsWithTypes = data.columns;
+                
+                populateFormulaList();
+                const firstFormula = Object.values(FORMULA_LIBRARY).flat()[0];
+                renderConfigPanel(firstFormula);
+                // The grid will initialize itself via onGridReady
+            } catch (error) {
+                console.error("Initialization failed:", error);
+            }
+        }
+
+        function populateFormulaList() {
+            let html = '';
+            let first = true;
+            for (const [category, formulas] of Object.entries(FORMULA_LIBRARY)) {
+                html += `<h4 style="margin-top: 15px;">${category}</h4>`;
+                html += formulas.map(f => {
+                    const activeClass = first ? 'active' : '';
+                    first = false;
+                    return `<div class="formula-item ${activeClass}" data-formula-id="${f.id}"><div class="name">${f.name}</div><div class="desc">${f.desc}</div></div>`;
+                }).join('');
+            }
+            formulaList.innerHTML = html;
+            addFormulaListListeners();
+        }
+        
+        function addFormulaListListeners() {
+            formulaList.addEventListener('click', (event) => {
+                const clickedItem = event.target.closest('.formula-item');
+                if (!clickedItem) return;
+                document.querySelectorAll('.formula-item').forEach(item => item.classList.remove('active'));
+                clickedItem.classList.add('active');
+                const formulaId = clickedItem.dataset.formulaId;
+                const formula = Object.values(FORMULA_LIBRARY).flat().find(f => f.id === formulaId);
+                renderConfigPanel(formula);
+            });
+        }
+
+        function renderConfigPanel(formula) {
+            let controlsHtml = `<h4>${formula.name}</h4>`;
+            const numericOptions = columnsWithTypes.filter(c => c.type !== 'VARCHAR').map(c => `<option value="${c.name}">${c.name}</option>`).join('');
+            const textOptions = columnsWithTypes.filter(c => c.type.includes('VARCHAR')).map(c => `<option value="${c.name}">${c.name}</option>`).join('');
+            const allOptions = columnsWithTypes.map(c => `<option value="${c.name}">${c.name}</option>`).join('');
+            const numericChecklist = columnsWithTypes.filter(c => c.type !== 'VARCHAR').map(c => `<div class="checklist-item"><input type="checkbox" name="multi_cols" value="${c.name}" id="multi-col-${c.name}"><label for="multi-col-${c.name}">${c.name}</label></div>`).join('');
+            const allChecklist = columnsWithTypes.map(c => `<div class="checklist-item"><input type="checkbox" name="multi_cols" value="${c.name}" id="multi-col-${c.name}"><label for="multi-col-${c.name}">${c.name}</label></div>`).join('');
+
+            if (formula.signature.startsWith('numeric')) {
+                if (formula.signature === 'numeric_single_no_param' || formula.signature === 'numeric_single_param') {
+                    controlsHtml += `<div class="control-group"><label>Source Column (Numeric)</label><select id="input-col-1">${numericOptions}</select></div>`;
+                    if (formula.signature === 'numeric_single_param') {
+                        controlsHtml += `<div class="control-group"><label>${formula.param_label}</label><input type="${formula.param_type}" id="param-1" value="${formula.param_default}"></div>`;
+                    }
+                } else if (formula.signature === 'numeric_multi_two') {
+                    controlsHtml += `<div class="control-group"><label>Column A</label><select id="input-col-1">${numericOptions}</select></div>`;
+                    controlsHtml += `<div class="control-group"><label>Column B</label><select id="input-col-2">${numericOptions}</select></div>`;
+                } else if (formula.signature === 'numeric_multi_many') {
+                    controlsHtml += `<div class="control-group"><label>Columns (select 2+)</label><div class="checklist-container">${numericChecklist}</div></div>`;
+                }
+            } 
+            else if (formula.signature.startsWith('text')) {
+                if (formula.signature === 'text_single_no_param') {
+                    controlsHtml += `<div class="control-group"><label>Source Column (Text)</label><select id="input-col-1">${textOptions}</select></div>`;
+                } else if (formula.signature === 'text_single_one_param') {
+                    controlsHtml += `<div class="control-group"><label>Source Column (Text)</label><select id="input-col-1">${textOptions}</select></div>`;
+                    controlsHtml += `<div class="control-group"><label>${formula.param_label}</label><input type="${formula.param_type}" id="param-1" value="${formula.param_default}"></div>`;
+                } else if (formula.signature === 'text_single_two_param') {
+                    controlsHtml += `<div class="control-group"><label>Source Column (Text)</label><select id="input-col-1">${textOptions}</select></div>`;
+                    controlsHtml += `<div class="control-group"><label>${formula.param_labels[0]}</label><input type="${formula.param_types[0]}" id="param-1" value="${formula.param_defaults[0]}"></div>`;
+                    controlsHtml += `<div class="control-group"><label>${formula.param_labels[1]}</label><input type="${formula.param_types[1]}" id="param-2" value="${formula.param_defaults[1]}"></div>`;
+                } else if (formula.signature === 'text_multi_many') {
+                    controlsHtml += `<div class="control-group"><label>Columns to Concatenate</label><div class="checklist-container">${allChecklist}</div></div>`;
+                    controlsHtml += `<div class="control-group"><label>Separator</label><input type="text" id="param-1" value=" "></div>`;
+                }
+            }
+
+            controlsHtml += `<div class="control-group"><label>New Column Name</label><input type="text" id="new-col-name" placeholder="e.g., New_Column"></div>`;
+            controlsHtml += `<button id="apply-formula-btn" class="apply-op-btn">Create Column</button><div id="op-status" class="status-message"></div>`;
+            
+            configPanel.innerHTML = controlsHtml;
+            addApplyListener(formula);
+        }
+
+        function addApplyListener(formula) {
+            const applyBtn = document.getElementById('apply-formula-btn');
+            if (!applyBtn) return; 
+
+            applyBtn.addEventListener('click', async () => {
+                const statusDiv = document.getElementById('op-status');
+                statusDiv.textContent = 'Processing...';
+                statusDiv.style.color = '#a095c0';
+                applyBtn.disabled = true;
+                
+                let payload = { formula_id: formula.id, new_col_name: document.getElementById('new-col-name').value };
+                let endpoint = '';
+                const signature = formula.signature;
+
+                if (signature.startsWith('numeric_single')) {
+                    endpoint = '/apply_single_col_formula';
+                    payload.input_col = document.getElementById('input-col-1').value;
+                    if (signature === 'numeric_single_param') {
+                        const paramInput = document.getElementById('param-1');
+                        payload.parameter = paramInput.type === 'number' ? parseFloat(paramInput.value) : paramInput.value;
+                    }
+                } else if (signature.startsWith('numeric_multi')) {
+                    endpoint = '/apply_multi_col_formula';
+                    if (signature === 'numeric_multi_two') {
+                        payload.input_cols = [ document.getElementById('input-col-1').value, document.getElementById('input-col-2').value ];
+                    } else if (signature === 'numeric_multi_many') {
+                        payload.input_cols = Array.from(document.querySelectorAll('input[name="multi_cols"]:checked')).map(cb => cb.value);
+                    }
+                } else if (signature.startsWith('text_single')) {
+                    endpoint = '/apply_single_col_text_formula';
+                    payload.input_col = document.getElementById('input-col-1').value;
+                    payload.parameters = [];
+                    const param1 = document.getElementById('param-1');
+                    const param2 = document.getElementById('param-2');
+                    if (param1) payload.parameters.push(param1.type === 'number' ? parseInt(param1.value, 10) : param1.value);
+                    if (param2) payload.parameters.push(param2.type === 'number' ? parseInt(param2.value, 10) : param2.value);
+                } else if (signature.startsWith('text_multi')) {
+                    endpoint = '/apply_multi_col_text_formula';
+                    payload.input_cols = Array.from(document.querySelectorAll('input[name="multi_cols"]:checked')).map(cb => cb.value);
+                    payload.parameters = [document.getElementById('param-1').value];
+                }
+
+                try {
+                    if (!endpoint) throw new Error("Could not determine API endpoint.");
+                    const response = await fetch(endpoint, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
+                    const result = await response.json();
+                    if (result.error) throw new Error(result.error);
+                    
+                    statusDiv.textContent = result.message;
+                    statusDiv.style.color = '#28a745';
+                    
+                    // On success, simply reload the page. This is the most robust way
+                    // to ensure the AG Grid re-initializes with the new data structure.
+                    window.location.reload();
+
+                } catch (error) {
+                    statusDiv.textContent = `Error: ${error.message}`;
+                    statusDiv.style.color = '#dc3545';
+                    applyBtn.disabled = false;
+                }
+            });
+        }
+        
+        // --- Initial Load ---
+        initializeView();
+    });
+</script>
+{% endblock %}

@@ -1,0 +1,251 @@
+{% extends "base.html" %}
+
+{% block title %}Full Data Report{% endblock %}
+
+{% block head_content %}
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        .page-content-wrapper { scrollbar-width: thin; scrollbar-color: #313131 #0F0F0F; }
+        .report-container { padding: 20px 40px; background-color: #0F0F0F; }
+        h1, h2, h3, h4 { color: #FFFFFF; }
+        h1 { border-bottom: 2px solid #2C2541; padding-bottom: 10px; }
+        h2 { border-bottom: 1px solid #2C2541; padding-bottom: 10px; margin-top: 40px; }
+        
+        /* --- Loading Placeholder --- */
+        #report-loader { text-align: center; padding: 80px 20px; color: #a095c0; }
+        .loader-spinner { border: 8px solid #2C2541; border-top: 8px solid #9D4EDD; border-radius: 50%; width: 60px; height: 60px; animation: spin 1s linear infinite; margin: 0 auto 20px auto; }
+        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+        #loading-progress-bar-container { width: 80%; max-width: 400px; background-color: #1f1f1f; border-radius: 5px; margin-top: 20px; border: 1px solid #2e2e2e; margin: 20px auto; }
+        #loading-progress-bar { width: 0%; height: 24px; background-color: #9D4EDD; border-radius: 5px; transition: width 0.4s ease; display: flex; align-items: center; justify-content: center; color: white; font-size: 12px; font-weight: 500; }
+
+        /* Main content hidden by default */
+        #report-content { display: none; }
+
+        /* --- Report Sections --- */
+        .metadata { display: flex; justify-content: space-between; flex-wrap: wrap; background-color: #1F1F1F; padding: 20px; border-radius: 8px; margin-bottom: 20px; font-size: 0.9em; }
+        .global-stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 1px; background-color: #2e2e2e; border: 1px solid #2e2e2e; }
+        .stat-card { background-color: #1F1F1F; padding: 20px; text-align: center; }
+        .stat-value { font-size: 1.8em; font-weight: bold; color: #9D4EDD; }
+        .stat-label { font-size: 0.9em; color: #a095c0; }
+        
+        .column-section { margin-bottom: 50px; background-color: #171717; padding: 20px; border: 1px solid #2e2e2e; }
+        .column-grid { display: grid; grid-template-columns: 400px 1fr; gap: 30px; align-items: flex-start; }
+        .stats-table { width: 100%; border-collapse: collapse; font-size: 14px; }
+        .stats-table td { padding: 8px; border-bottom: 1px solid #2C2541; }
+        .stats-table td:first-child { color: #a095c0; font-weight: 500; }
+        .stats-table td:last-child { color: #E0D9F0; font-weight: 500; text-align: right; }
+        .chart-container { min-height: 300px; }
+
+        .heatmap-table { border-collapse: collapse; margin-top: 20px; font-size: 12px; }
+        .heatmap-table th, .heatmap-table td { padding: 5px; text-align: center; border: 1px solid #0F0F0F; min-width: 50px; height: 50px; }
+        .heatmap-table th { writing-mode: vertical-lr; transform: rotate(180deg); }
+        .heatmap-table th.top-header { writing-mode: horizontal-tb; transform: none; }
+    </style>
+{% endblock %}
+
+{% block content %}
+<div class="report-container">
+    <h1>Exploratory Data Analysis Report</h1>
+
+    <div id="report-loader">
+        <div class="loader-spinner"></div>
+        <h2 id="loading-text">Generating Your Report...</h2>
+        <p>This may take a moment for large datasets.</p>
+        <div id="loading-progress-bar-container">
+            <div id="loading-progress-bar">0%</div>
+        </div>
+    </div>
+
+    <div id="report-content">
+        <div class="metadata">
+            <div><strong>Dataset:</strong> <span id="meta-dataset-name"></span></div>
+            <div><strong>Generated On:</strong> <span id="meta-generation-time"></span></div>
+        </div>
+        <p id="header-summary" style="color: #a095c0;"></p>
+
+        <h2>Global Dataset Overview</h2>
+        <div class="global-stats" id="global-stats-container"></div>
+        <div style="max-width: 400px; margin: 30px auto;"><canvas id="variable-types-chart"></canvas></div>
+        
+        <h2>Column Analysis</h2>
+        <div id="column-analysis-container"></div>
+
+        <h2>Variable Relationships</h2>
+        <div id="association-matrix-container"></div>
+    </div>
+</div>
+{% endblock %}
+
+{% block body_scripts %}
+<script>
+document.addEventListener('DOMContentLoaded', () => {
+    const loader = document.getElementById('report-loader');
+    const loadingText = document.getElementById('loading-text');
+    const progressBar = document.getElementById('loading-progress-bar');
+    const content = document.getElementById('report-content');
+
+    // --- NEW: A more advanced polling function that handles progress ---
+    function pollJobProgress(jobId, onComplete, onError) {
+        const interval = setInterval(async () => {
+            try {
+                // Use the progress endpoint we created before
+                const response = await fetch(`/job_progress/${jobId}`, { credentials: 'same-origin' });
+                if (!response.ok) throw new Error('Network response was not ok.');
+                const data = await response.json();
+
+                // Update UI with progress
+                loadingText.textContent = data.status_message || 'Processing...';
+                progressBar.style.width = `${data.progress}%`;
+                progressBar.textContent = `${Math.round(data.progress)}%`;
+
+                if (data.status === 'finished') {
+                    clearInterval(interval);
+                    onComplete(data.result);
+                } else if (data.status === 'failed') {
+                    clearInterval(interval);
+                    onError(data.error);
+                }
+            } catch (error) {
+                clearInterval(interval);
+                onError('Error polling job status: ' + error.message);
+            }
+        }, 1500); // Poll every 1.5 seconds
+    }
+
+    async function startReportGeneration() {
+        try {
+            const response = await fetch('/start_report_generation', { method: 'POST', credentials: 'same-origin' });
+            if (response.status !== 202) {
+                const errData = await response.json();
+                throw new Error(errData.error || 'Failed to start job.');
+            }
+            const data = await response.json();
+            
+            pollJobProgress(
+                data.job_id,
+                (reportData) => { // onComplete
+                    loader.style.display = 'none';
+                    renderReport(reportData);
+                    content.style.display = 'block';
+                },
+                (errorMsg) => { // onError
+                    loader.innerHTML = `<h2 style="color:#ffc107;">Error Generating Report</h2><p>${errorMsg}</p>`;
+                }
+            );
+        } catch (error) {
+            loader.innerHTML = `<h2 style="color:#ffc107;">Error</h2><p>${error.message}</p>`;
+        }
+    }
+
+    function renderReport(report) {
+        document.getElementById('meta-dataset-name').textContent = report.header.dataset_name;
+        document.getElementById('meta-generation-time').textContent = report.header.generation_time;
+        document.getElementById('header-summary').textContent = report.header.summary;
+
+        const overview = report.global_overview;
+        document.getElementById('global-stats-container').innerHTML = `
+            <div class="stat-card"><div class="stat-value">${overview.observations.toLocaleString()}</div><div class="stat-label">Observations (Rows)</div></div>
+            <div class="stat-card"><div class="stat-value">${overview.variables}</div><div class="stat-label">Variables (Columns)</div></div>
+            <div class="stat-card"><div class="stat-value">${overview.total_missing.toLocaleString()}</div><div class="stat-label">Missing Cells</div></div>
+            <div class="stat-card"><div class="stat-value">${overview.missing_percent}%</div><div class="stat-label">Missing Cells (%)</div></div>
+            <div class="stat-card"><div class="stat-value">${overview.duplicate_rows.toLocaleString()}</div><div class="stat-label">Duplicate Rows</div></div>
+            <div class="stat-card"><div class="stat-value">${overview.memory_footprint}</div><div class="stat-label">Memory Usage</div></div>
+        `;
+
+        const columnContainer = document.getElementById('column-analysis-container');
+        columnContainer.innerHTML = report.column_details.map(column => {
+            const stats = column.stats;
+            // Create a more structured and readable stats table
+            const statsHtml = `
+                <tr><td>Missing</td><td>${stats.missing} (${stats.missing_percent})</td></tr>
+                <tr><td>Unique Values</td><td>${stats.unique_values}</td></tr>
+                <tr><td>Memory Usage</td><td>${stats.memory_usage}</td></tr>
+            ` + (column.type_group === 'numeric' ? `
+                <tr><td>Mean</td><td>${stats.mean?.toFixed(3) ?? 'N/A'}</td></tr>
+                <tr><td>Median</td><td>${stats.median?.toFixed(3) ?? 'N/A'}</td></tr>
+                <tr><td>Min / Max</td><td>${stats.min} / ${stats.max}</td></tr>
+                <tr><td>Std. Deviation</td><td>${stats.std_dev?.toFixed(3) ?? 'N/A'}</td></tr>
+                <tr><td>Skewness</td><td>${stats.skewness?.toFixed(3) ?? 'N/A'}</td></tr>
+                <tr><td>Kurtosis</td><td>${stats.kurtosis?.toFixed(3) ?? 'N/A'}</td></tr>
+            ` : column.type_group === 'categorical' ? `
+                <tr><td>Top Value</td><td>${stats.top_value ?? 'N/A'}</td></tr>
+                <tr><td>Top Frequency</td><td>${stats.top_freq ?? 'N/A'}</td></tr>
+                <tr><td>Mean Length</td><td>${stats.mean_length?.toFixed(2) ?? 'N/A'}</td></tr>
+            ` : ''); // Add more for other types if needed
+
+            return `
+                <div class="column-section">
+                    <h3>${column.name} <small style="color: #a095c0;">(Type: ${column.type})</small></h3>
+                    <div class="column-grid">
+                        <div><h4>Statistics</h4><table class="stats-table">${statsHtml}</table></div>
+                        <div class="chart-container"><canvas id="chart-${column.name}"></canvas></div>
+                    </div>
+                </div>
+            `;
+        }).join('');
+
+        const matrixContainer = document.getElementById('association-matrix-container');
+        if (report.association_matrix) {
+            const matrix = report.association_matrix;
+            matrixContainer.innerHTML = `
+                <h3>Association Matrix</h3>
+                <p>Shows the strength of association between variable pairs. (Pearson's r for N-N, Cramer's V for C-C, Correlation Ratio for N-C).</p>
+                <div style="overflow-x: auto;">
+                    <table class="heatmap-table">
+                        <thead><tr><th class="top-header">&nbsp;</th>${matrix.labels.map(l => `<th class="top-header">${l}</th>`).join('')}</tr></thead>
+                        <tbody>
+                            ${matrix.rows.map((row, i) => `
+                                <tr>
+                                    <th>${matrix.labels[i]}</th>
+                                    ${row.map(cell => `<td style="background-color: ${cell.color};" title="${cell.value}">${cell.value}</td>`).join('')}
+                                </tr>`).join('')}
+                        </tbody>
+                    </table>
+                </div>`;
+        } else {
+            matrixContainer.innerHTML = `<p><i>Not enough variables to generate an association matrix.</i></p>`;
+        }
+
+        renderAllCharts(report);
+    }
+
+    function renderAllCharts(reportData) {
+        // ... (this function remains largely the same, but we make the pie chart nicer)
+        const varTypesData = reportData.global_overview.variable_types;
+        const varTypesCtx = document.getElementById('variable-types-chart').getContext('2d');
+        new Chart(varTypesCtx, { 
+            type: 'doughnut', 
+            data: { 
+                labels: Object.keys(varTypesData), 
+                datasets: [{ 
+                    data: Object.values(varTypesData), 
+                    backgroundColor: ['#9D4EDD', '#5A189A', '#C77DFF', '#7B2CBF', '#3C096C'],
+                    borderColor: '#0F0F0F',
+                    borderWidth: 2
+                }] 
+            }, 
+            options: { 
+                responsive: true,
+                plugins: { 
+                    title: { display: true, text: 'Variable Types', color: '#E0D9F0', font: {size: 16} },
+                    legend: { position: 'top', labels: { color: '#a095c0' } }
+                } 
+            } 
+        });
+
+        // Column charts (same logic as before)
+        reportData.column_details.forEach(column => {
+            const colCtx = document.getElementById(`chart-${column.name}`)?.getContext('2d');
+            if (!colCtx || !column.chart_data) return;
+            if (column.chart_data.type === 'histogram') {
+                new Chart(colCtx, { type: 'bar', data: { labels: column.chart_data.data.map(d => parseFloat(d.x).toFixed(2)), datasets: [{ label: 'Frequency', data: column.chart_data.data.map(d => d.y), backgroundColor: '#9D4EDD' }] }, options: { plugins: { legend: { display: false } }, scales: {x:{ticks:{color:'#a095c0'}}, y:{ticks:{color:'#a095c0'}}} } });
+            } else if (column.chart_data.type === 'bar') {
+                new Chart(colCtx, { type: 'bar', data: { labels: column.chart_data.data.map(d => d.category), datasets: [{ label: 'Count', data: column.chart_data.data.map(d => d.count), backgroundColor: '#9D4EDD' }] }, options: { indexAxis: 'y', plugins: { legend: { display: false } }, scales: {x:{ticks:{color:'#a095c0'}}, y:{ticks:{color:'#a095c0'}}} } });
+            }
+        });
+    }
+
+    startReportGeneration();
+});
+</script>
+{% endblock %}

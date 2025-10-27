@@ -1,0 +1,233 @@
+{% extends "base.html" %}
+
+{% block title %}Admin Dashboard{% endblock %}
+
+{% block head_content %}
+<style>
+    /* Main Layout */
+    .admin-layout { 
+        max-width: 1200px; 
+        margin: 20px auto; 
+        padding: 20px; 
+    }
+    h1 { 
+        color: #FFFFFF; 
+    }
+    .admin-grid { 
+        display: grid; 
+        grid-template-columns: 2fr 1fr; 
+        gap: 30px; 
+        margin-top: 20px;
+    }
+    
+    /* Card Styling */
+    .card { 
+        background-color: #1f1f1f; 
+        border: 1px solid #2e2e2e; 
+        border-radius: 0px; 
+        padding: 20px; 
+    }
+    .card h2 { 
+        margin-top: 0; 
+        color: #E0D9F0; 
+        border-bottom: 1px solid #4a3f6e; 
+        padding-bottom: 10px; 
+    }
+
+    /* Team Member Table */
+    .team-table { 
+        width: 100%; 
+        border-collapse: collapse; 
+    }
+    .team-table th, .team-table td { 
+        padding: 12px; 
+        text-align: left; 
+        border-bottom: 1px solid #1E192B; 
+    }
+    .team-table th { 
+        color: #a095c0; 
+    }
+    .team-table td .role-badge { 
+        background-color: #9D4EDD; 
+        color: white; 
+        padding: 4px 8px; 
+        border-radius: 12px; 
+        font-size: 12px; 
+    }
+    
+    /* Action Buttons in Table */
+    .action-btn { 
+        background: none; border: 1px solid #363636; color: #E0D9F0; 
+        padding: 6px 12px; border-radius: 9999px; cursor: pointer; 
+        transition: all 0.2s; font-family: inherit; font-size: 12px;
+        background-color: #242424;
+    }
+    .action-btn:hover:not(:disabled) { background-color: #4a3f6e; color: white; }
+    .action-btn.remove { border-color: #dc3545; color: #dc3545; }
+    .action-btn.remove:hover { background-color: #dc3545; color: white; }
+    .action-btn:disabled { border-color: #2C2541; color: #4a3f6e; cursor: not-allowed; }
+
+    /* Invite User Form */
+    .invite-form { 
+        display: flex; 
+        flex-direction: column; 
+        gap: 15px; 
+    }
+    .invite-form input { padding: 10px; border-radius: 5px; border: 1px solid #363636; background-color: #1f1f1f; color: #fafafa; }
+
+    .invite-form button { 
+        background-color: #1f1f1f; color: #898989; padding: 12px; border: 1px solid #2e2e2e; 
+        border-radius: 8px; font-size: 0.8em; cursor: pointer; 
+    }
+
+    /* Flash Messages */
+    .flash-message { 
+        padding: 15px; 
+        border-radius: 5px; 
+        margin-bottom: 20px; 
+    }
+    .flash-message.success { 
+        background-color: #1c4b27; 
+        color: #a3e9b4; 
+        border: 1px solid #28a745;
+    }
+    .flash-message.error { 
+        background-color: #492328; 
+        color: #ffc107; 
+        border: 1px solid #dc3545;
+    }
+
+    /* Usage Metrics Section */
+    .usage-metrics-grid {
+        display: flex;
+        justify-content: space-around;
+        text-align: center;
+        padding-top: 10px;
+    }
+    .metric-item h3 {
+        font-size: 2.5em;
+        color: #b4b4b4;
+        margin: 0;
+    }
+    .metric-item p {
+        color: #a095c0;
+        margin-top: 5px;
+        font-size: 1em;
+    }
+
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="admin-layout">
+    <h1>Admin Dashboard</h1>
+    <p style="color: #a095c0;">Manage your organization's team members and their roles.</p>
+    
+    <!-- Flash Messages for Success/Error Notifications -->
+    {% with messages = get_flashed_messages(with_categories=true) %}
+        {% if messages %}
+            {% for category, message in messages %}
+                <div class="flash-message {{ category }}">{{ message }}</div>
+            {% endfor %}
+        {% endif %}
+    {% endwith %}
+
+    <div class="admin-grid">
+        <!-- Team Members List Card -->
+        <div class="card">
+            <h2>Team Members</h2>
+            <table class="team-table">
+                <thead>
+                    <tr>
+                        <th>Email</th>
+                        <th>Role</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for member in members %}
+                    <tr>
+                        <td>
+                            {{ member.id.email }}
+                            <!-- Add a '(You)' tag for the currently logged-in admin -->
+                            {% if member.id.id == session.user.id %}
+                                <span style="color: #a095c0; font-size: 12px; margin-left: 5px;">(You)</span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            <span class="role-badge">{{ member.role }}</span>
+                        </td>
+                        <td>
+                            <!-- Only show role-change buttons for users OTHER THAN the current user -->
+                            {% if member.id.id != session.user.id %}
+                                <form method="POST" action="{{ url_for('set_role', user_id=member.id.id) }}" style="display: inline-block;">
+                                    <input type="hidden" name="source_page" value="admin_dashboard">
+                                    {% if member.role == 'user' %}
+                                        <input type="hidden" name="role" value="admin">
+                                        <button type="submit" class="action-btn">Promote to Admin</button>
+                                    {% else %}
+                                        <input type="hidden" name="role" value="user">
+                                        <button type="submit" class="action-btn">Demote to User</button>
+                                    {% endif %}
+                                </form>
+                            {% endif %}
+
+                            <!-- Only show the Remove button for users OTHER THAN the current user -->
+                            {% if member.id.id != session.user.id %}
+                                <form method="POST" action="{{ url_for('remove_user', user_id=member.id.id) }}" style="display: inline-block;" onsubmit="return confirm('Are you sure you want to remove this user? This action cannot be undone.');">
+                                    <input type="hidden" name="source_page" value="admin_dashboard">
+                                    <button type="submit" class="action-btn remove">Remove</button>
+                                </form>
+                            {% else %}
+                                <!-- Show a disabled button for the current user for better UX -->
+                                <button class="action-btn remove" disabled>Remove</button>
+                            {% endif %}
+                        </td>
+                    </tr>
+                    {% else %}
+                    <tr>
+                        <td colspan="3" style="text-align: center; color: #a095c0; padding: 20px;">
+                            No team members found. Invite a new user to get started.
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        
+        <!-- Invite New User Card -->
+        <div class="card">
+            <h2>Invite New User</h2>
+            <form class="invite-form" method="POST" action="{{ url_for('invite_user') }}">
+                <!-- Add the hidden input to tell the backend where to redirect -->
+                <input type="hidden" name="source_page" value="admin_dashboard">
+                
+                <p style="font-size: 12px; color:#a095c0;">Create an account for a new team member...</p>
+                <input type="email" name="email" placeholder="New user's email" required>
+                <input type="password" name="password" placeholder="Set a temporary password" required>
+                <button type="submit">Create & Invite User</button>
+            </form>
+        </div>
+    </div>
+
+    <!-- Usage Metrics Card -->
+    <div class="card" style="margin-top: 30px;">
+        <h2>Usage Overview</h2>
+        <div class="usage-metrics-grid">
+            <div class="metric-item">
+                <h3>{{ "{:,}".format(usage.get('user_count', 0)) }}</h3>
+                <p>Team Members</p>
+            </div>
+            <div class="metric-item">
+                <h3>{{ "{:,}".format(usage.get('pipeline_count', 0)) }}</h3>
+                <p>Saved Pipelines</p>
+            </div>
+            <div class="metric-item">
+                <h3>{{ "{:,}".format(usage.get('rows_processed', 0)) }}</h3>
+                <p>Total Rows Processed</p>
+            </div>
+        </div>
+    </div>
+
+</div>
+{% endblock %}

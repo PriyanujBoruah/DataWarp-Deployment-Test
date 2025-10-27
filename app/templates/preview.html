@@ -1,0 +1,818 @@
+{% extends "base.html" %}
+
+{% block title %}Data Preview (AG Grid){% endblock %}
+
+{% block head_content %}
+    <script src="https://unpkg.com/ag-grid-community/dist/ag-grid-community.min.js"></script>
+
+    <style>
+        /* --- AG Grid Custom Theme --- */
+        .ag-theme-alpine-dark {
+            --ag-font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            --ag-background-color: #121212;
+            --ag-foreground-color: #E0D9F0;
+            --ag-border-color: #2e2e2e;
+            --ag-header-background-color: #1f1f1f;
+            --ag-header-foreground-color: #FFFFFF;
+            --ag-header-cell-hover-background-color: #2C2541;
+            --ag-list-item-height: 42px;
+            --ag-row-height: 32px; 
+            --ag-row-background-color: #171717;
+            --ag-row-hover-color: #2C2541;
+            --ag-odd-row-background-color: #171717;
+            --ag-icon-color: #a095c0;
+            --ag-range-selection-border-color: #9D4EDD;
+            --ag-range-selection-background-color: rgba(157, 78, 221, 0.2);
+            --ag-selected-row-background-color: rgba(157, 78, 221, 0.25);
+            --ag-modal-overlay-background-color: rgba(30, 25, 43, 0.6);
+            --ag-input-wrapper-background-color: #1E192B;
+        }
+
+        /* --- Generic & Layout Styles --- */
+        .sidebar, .relationship-list, .freq-table, .values-list, .ag-body-horizontal-scroll-viewport, .ag-body-vertical-scroll-viewport { scrollbar-width: thin; scrollbar-color: #313131 #171717; }
+        .app-container { display: flex; height: 100%; }
+        .main-content { flex-grow: 1; display: flex; flex-direction: column; overflow: hidden; min-width: 0; }
+        h1 { margin: 0; color: #FFFFFF; font-size: 1.8em; }
+        #myGrid { flex-grow: 1; width: 100%; height: 100%; }
+        .ag-root-wrapper { border-color: #2e2e2e !important; border-radius: 0px !important; }
+
+
+        .sidebar { width: 320px; flex-shrink: 0; background-color: #1E1B2B; border-right: 1px solid #2e2e2e; display: flex; flex-direction: column; height: 100%; }
+        .sidebar-top { flex-grow: 1; overflow-y: auto; padding: 20px; min-height: 0; background-color: #171717; }
+        .sidebar-bottom { flex-shrink: 0; height: 35%; border-top: 1px solid #2e2e2e; display: flex; flex-direction: column; background-color: #171717; }
+        .sidebar h2 { margin-top: 0; color: #fff; }
+        .sidebar .placeholder { color: #a095c0; text-align: center; margin-top: 50px; font-style: italic; }
+        .stats-grid { display: grid; gap: 15px; padding: 15px; border-radius: 8px; }
+        .stat-item { text-align: center; }
+        .stat-label { font-size: 12px; color: #a095c0; display: block; }
+        .stat-value { font-size: 18px; font-weight: bold; color: #FFFFFF; display: block; }
+        .chart-grid { display: grid; grid-template-columns: 1fr; gap: 30px; margin-top: 20px; }
+        .tab-nav { display: flex; background-color: #171717; border-bottom: 1px solid #2C2541; flex-shrink: 0; padding: 0 10px; }
+        .tab-btn { flex: 1; padding: 10px; background: none; border: none; border-bottom: 2px solid transparent; color: #4d4d4d; font-size: 14px; font-weight: 500; cursor: pointer; transition: all 0.2s ease-in-out; }
+        .tab-btn:hover { background-color: #2C2541; }
+        .tab-btn.active { color: #898989; border-bottom-color: #FFF; }
+        .tab-content-area { flex-grow: 1; position: relative; min-height: 0; padding: 0 20px 20px 20px; }
+        .tab-pane { position: absolute; top: 0; left: 0; width: 100%; height: 100%; display: flex; flex-direction: column; visibility: hidden; opacity: 0; transition: opacity 0.2s ease-in-out; padding-top: 15px; box-sizing: border-box; }
+        .tab-pane.active { visibility: visible; opacity: 1; }
+        #values-container, .freq-table-container, .values-table-container { height: 100%; display: flex; flex-direction: column; }
+        .freq-table, .values-list { flex-grow: 1; overflow-y: auto; border: 1px solid #2e2e2e; border-radius: 5px; min-height: 0; }
+        .search-input { width: 100%; padding: 8px; margin-bottom: 10px; border-radius: 5px; border: 1px solid #363636; background-color: #1f1f1f; color: #fafafa; box-sizing: border-box; }
+        .freq-table table { width: 100%; border-collapse: collapse; }
+        .freq-table th, .freq-table td { padding: 6px 10px; text-align: left; }
+        .freq-table th { background-color: #171717; position: sticky; top: 0; }
+        .freq-table tbody tr { cursor: pointer; background-color: #1f1f1f; }
+        .freq-table tbody tr:hover { background-color: #4a3f6e !important; }
+        .relationship-container { height: 100%; display: flex; flex-direction: column; }
+        .relationship-list { flex-grow: 1; overflow-y: auto; min-height: 0; }
+        .relationship-item { display: grid; grid-template-columns: 1fr auto; gap: 10px; padding: 10px; align-items: center; border-bottom: 1px solid #2C2541; }
+        .relationship-item .col-name { font-weight: 500; color: #E0D9F0; }
+        .relationship-item .interp { font-size: 0.8em; color: #a095c0; }
+        .relationship-item .score-box { text-align: right; }
+        .relationship-item .score-value { font-size: 1.2em; font-weight: bold; color: #9D4EDD; }
+        .relationship-item .score-name { font-size: 0.7em; color: #a095c0; text-transform: uppercase; }
+        .progress-bar-container { background-color: #2C2541; border-radius: 10px; height: 8px; margin-top: 5px; }
+        .progress-bar-fill { background-color: #9D4EDD; height: 100%; border-radius: 10px; }
+        .values-controls { display: flex; gap: 10px; margin-bottom: 10px; }
+        .values-controls .search-input { flex-grow: 1; }
+        .sort-btn { padding: 8px 12px; border: 1px solid #4a3f6e; background-color: #1E192B; color: #E0D9F0; border-radius: 5px; cursor: pointer; }
+        .sort-btn.active { background-color: #9D4EDD; color: white; border-color: #9D4EDD; }
+        .values-list { padding: 5px; }
+        .value-item { padding: 4px 8px; border-radius: 3px; cursor: pointer; background-color: #2C2541; }
+        .value-item:hover { background-color: #4a3f6e; }
+
+        /* --- Styles for Column Operations --- */
+        .main-controls-header {
+            display: flex;
+            justify-content: space-between; /* This pushes the two groups to opposite ends */
+            align-items: flex-end; /* Aligns items to the bottom for a clean look */
+            gap: 10px;
+            flex-wrap: wrap; /* Allows wrapping on smaller screens */
+            padding: 10px 20px 10px 20px;
+            background-color: #1f1f1f;
+        }
+
+        .controls-group-left,
+        .controls-group-right {
+            display: flex;
+            align-items: flex-end; /* Aligns buttons and dropdowns to the bottom */
+            gap: 10px; /* Space between items within a group */
+        }
+
+        .op-dropdown-container { position: relative; }
+        .op-header-btn { padding: 8px 15px; background-color: #1f1f1f; border: 1px solid #363636; color: #fff; border-radius: 6px; cursor: pointer; font-weight: 500; font-family: inherit; font-size: 0.7em; transition: all 0.2s ease; }
+        .op-header-btn:hover { border-color: #424242; }
+        .op-dropdown { display: none; position: absolute; top: 100%; left: 0; z-index: 1000; min-width: 300px; background-color: #1f1f1f; border: 1px solid #2e2e2e; border-radius: 8px; box-shadow: 0 8px 16px rgba(0,0,0,0.4); padding: 20px; }
+        .op-dropdown.show { display: block; }
+        .controls-group-right .op-dropdown {
+            left: auto;
+            right: 0;
+        }
+        .op-dropdown .control-group { margin-top: 0; margin-bottom: 15px; }
+        .op-dropdown h4 { margin: 0 0 15px 0; color: #FFFFFF; border-bottom: 1px solid #4a3f6e; padding-bottom: 10px; }
+        .control-group label { font-size: 12px; font-weight: 500; color: #a095c0; display: block; margin-bottom: 8px; }
+        .control-group select, .control-group input { width: 100%; padding: 8px; border-radius: 5px; border: 1px solid #363636; background-color: #1f1f1f; color: #fafafa; box-sizing: border-box; }
+        .apply-op-btn { width: 100%; padding: 10px; background-color: #9D4EDD; color: white; border: none; border-radius: 5px; font-size: 14px; font-weight: 500; cursor: pointer; transition: background-color 0.2s; margin-top: 15px; }
+        .apply-op-btn:hover { background-color: #8b3dcf; }
+        .status-message { text-align: center; color: #a095c0; font-size: 14px; margin-top: 15px; }
+        .checklist-container { max-height: 150px; overflow-y: auto; border: 1px solid #363636; background-color: #1f1f1f; border-radius: 5px; padding: 10px; }
+        .checklist-item { display: flex; align-items: center; margin-bottom: 8px; }
+        .checklist-item input { width: 16px; height: 16px; margin-right: 10px; }
+        .checklist-item label { color: #E0D9F0; font-weight: normal; }
+        .inline-checkbox { display: flex; align-items: center; margin-top: 10px; }
+        .inline-checkbox input { width: 16px; height: 16px; margin-right: 8px; }
+        .inline-checkbox label { font-size: 14px; color: #a095c0; font-weight: normal; }
+
+        /* --- Styles for Custom Status Bar --- */
+        .custom-status-bar {
+            padding: 8px 15px;
+            background-color: #171717;
+            border-top: 1px solid #2e2e2e;
+            font-size: 14px;
+            color: #afafaf;
+            display: flex;
+            gap: 20px;
+        }
+        .custom-status-bar span {
+            color: #FFFFFF;
+            font-weight: 500;
+        }
+
+        #delete-rows-btn:not(:disabled):hover {
+            background-color: #dc3545; /* Red on hover */
+            border-color: #dc3545;
+            color: white;
+        }
+        #delete-rows-btn:disabled {
+            background-color: #0F0F0F;
+            border-color: #0F0F0F;
+            color: #4d4d4d; /* Muted icon color when disabled */
+            cursor: not-allowed;
+        }
+        #delete-rows-btn svg {
+            pointer-events: none; /* Ensures the button click event fires */
+        }
+
+        .stats-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 15px;
+            font-size: 14px;
+        }
+        .stats-table td {
+            padding: 8px 5px;
+            border-bottom: 1px solid #2C2541;
+        }
+        .stats-table td:first-child {
+            font-weight: 500;
+            color: #a095c0;
+            text-align: left;
+        }
+        .stats-table td:last-child {
+            font-weight: bold;
+            color: #FFFFFF;
+            text-align: right;
+            font-family: monospace;
+        }
+        .stats-table tr:last-child td {
+            border-bottom: none;
+        }
+
+
+        /* --- Styles for 5-Number Summary Line --- */
+        .summary-line-container {
+            padding: 30px 10px 20px 10px; /* Top padding for labels */
+            margin-top: 20px;
+            position: relative;
+        }
+        .summary-line {
+            height: 2px;
+            background-color: #4a3f6e; /* Using a theme color */
+            width: 100%;
+            position: relative;
+        }
+        .summary-point {
+            position: absolute;
+            top: 50%;
+            transform: translate(-50%, -50%); /* Center the point on the line */
+            width: 10px;
+            height: 10px;
+            background-color: #a095c0; /* A lighter theme color */
+            border-radius: 50%;
+            border: 2px solid #161220; /* Same as the sidebar background for a 'cutout' look */
+        }
+        .summary-point.median {
+            background-color: #9D4EDD; /* Highlight color for median */
+            width: 12px;
+            height: 12px;
+        }
+        .summary-label-group {
+            position: absolute;
+            bottom: 100%; /* Position labels above the point */
+            transform: translateX(-50%);
+            text-align: center;
+            white-space: nowrap;
+            margin-bottom: 5px;
+        }
+        .summary-label {
+            font-size: 11px;
+            color: #a095c0;
+            display: block;
+        }
+        .summary-value {
+            font-size: 13px;
+            font-weight: bold;
+            color: #FFFFFF;
+            display: block;
+        }
+    </style>
+{% endblock %}
+
+
+{% block content %}
+    <div class="app-container">
+        <div class="sidebar" id="sidebar">
+            <div class="sidebar-top" id="sidebar-top">
+                <h2>Column Inspector</h2>
+                <div class="placeholder"><p>Click a column header to see its details.</p></div>
+            </div>
+            <div class="sidebar-bottom">
+                <div class="tab-nav" id="tab-nav">
+                    <button class="tab-btn active" data-tab="relationships">Relationships</button>
+                    <button class="tab-btn" data-tab="values">Values / Frequency</button>
+                </div>
+                <div class="tab-content-area">
+                    <div id="tab-relationships" class="tab-pane active">
+                        <div class="relationship-container" id="relationship-container">
+                             <p style="padding-top: 20px; color: #a095c0;">Select a column to view relationships.</p>
+                        </div>
+                    </div>
+                    <div id="tab-values" class="tab-pane">
+                        <div id="values-container">
+                            <p style="padding-top: 20px; color: #a095c0;">Select a column to view its values.</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="main-content">
+            <div class="main-controls-header">
+                <!-- NEW: Left-aligned group -->
+                <div class="controls-group-left">
+                    <div style="flex-grow: 1; max-width: 300px; display: flex; flex-direction: column; justify-content: center;">
+                        <select id="target-column-select" style="width: 100%; padding: 8px; border-radius: 6px; border: 1px solid #2e2e2e; background-color: #1f1f1f; color: #E0D9F0;"></select>
+                    </div>
+                    <div class="op-dropdown-container"> <!-- Keep container for alignment -->
+                        <button class="op-header-btn" id="delete-rows-btn" title="Delete Selected Rows" disabled>
+                            <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path><line x1="10" y1="11" x2="10" y2="17"></line><line x1="14" y1="11" x2="14" y2="17"></line></svg>
+                        </button>
+                    </div>
+                </div>
+
+                <!-- NEW: Right-aligned group -->
+                <div class="controls-group-right">
+                    <div class="op-dropdown-container">
+                        <button class="op-header-btn" data-op="convert">Convert</button>
+                        <div class="op-dropdown" id="dropdown-convert"></div>
+                    </div>
+                    <div class="op-dropdown-container">
+                        <button class="op-header-btn" data-op="rename">Rename</button>
+                        <div class="op-dropdown" id="dropdown-rename"></div>
+                    </div>
+                    <div class="op-dropdown-container">
+                        <button class="op-header-btn" data-op="merge">Merge</button>
+                        <div class="op-dropdown" id="dropdown-merge"></div>
+                    </div>
+                    <div class="op-dropdown-container">
+                        <button class="op-header-btn" data-op="split">Split</button>
+                        <div class="op-dropdown" id="dropdown-split"></div>
+                    </div>
+                    <div class="op-dropdown-container">
+                        <button class="op-header-btn" data-op="drop">Drop</button>
+                        <div class="op-dropdown" id="dropdown-drop"></div>
+                    </div>
+                </div>
+            </div>
+
+            <div id="myGrid" class="ag-theme-alpine-dark"></div>
+
+            <div class="custom-status-bar">
+                <div id="custom-status-bar-selected">Selected: <span>0</span></div>
+            </div>
+
+        </div>
+    </div>
+{% endblock %}
+
+
+{% block body_scripts %}
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            // --- DOM Elements ---
+            const sidebarTop = document.getElementById('sidebar-top');
+            const relationshipContainer = document.getElementById('relationship-container');
+            const valuesContainer = document.getElementById('values-container');
+            const tabNav = document.getElementById('tab-nav');
+            const eGridDiv = document.querySelector('#myGrid');
+            const customStatusBarSelected = document.querySelector('#custom-status-bar-selected span');
+            const targetColumnSelect = document.getElementById('target-column-select');
+            const deleteRowsBtn = document.getElementById('delete-rows-btn');
+            
+            // --- State ---
+            let activeChart = null;
+            let currentColumn = null;
+            let gridApi;
+            let columnsWithTypes = [];
+
+            // --- AG Grid Setup ---
+            const gridOptions = {
+                columnDefs: [],
+                defaultColDef: { sortable: true, filter: true, resizable: true, editable: true, minWidth: 150 },
+                rowModelType: 'infinite',
+                cacheBlockSize: 100,
+                maxBlocksInCache: 10,
+
+                // Add this line to treat field names with dots as a single key
+                suppressFieldDotNotation: true,
+                
+                // This object enables click-to-select and fixes all warnings.
+                rowSelection: {
+                    mode: 'multiRow',                  // CORRECTED: Fixes the "undefined" error.
+                    enableSelectionWithoutKeys: true,   // Enables selecting rows just by clicking them.
+                },
+
+                onSelectionChanged: (params) => {
+                    const selectedCount = params.api.getSelectedRows().length;
+                    if (customStatusBarSelected) {
+                        customStatusBarSelected.textContent = selectedCount.toLocaleString();
+                    }
+                    if (deleteRowsBtn) {
+                        deleteRowsBtn.disabled = selectedCount === 0;
+                    }
+                },
+                onSortChanged: (p) => localStorage.setItem('myGridColumnState', JSON.stringify(p.api.getColumnState())),
+                onColumnResized: (p) => { if (p.finished) localStorage.setItem('myGridColumnState', JSON.stringify(p.api.getColumnState())); },
+                onColumnMoved: (p) => localStorage.setItem('myGridColumnState', JSON.stringify(p.api.getColumnState())),
+                onColumnPinned: (p) => localStorage.setItem('myGridColumnState', JSON.stringify(p.api.getColumnState())),
+                onColumnVisible: (p) => localStorage.setItem('myGridColumnState', JSON.stringify(p.api.getColumnState())),
+                onCellValueChanged: async (p) => {
+                    try {
+                        const res = await fetch('/edit_cell', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ row_index: p.rowIndex, column_name: p.column.getColId(), new_value: p.newValue }) });
+                        const result = await res.json();
+                        if (result.error) throw new Error(result.error);
+                        if (window.updateUndoRedoStatus) window.updateUndoRedoStatus();
+                    } catch (error) {
+                        alert(`Error: ${error.message}`);
+                        p.node.setDataValue(p.column.getColId(), p.oldValue);
+                    }
+                },
+                onGridReady: (params) => {
+                    gridApi = params.api;
+                    const savedState = localStorage.getItem('myGridColumnState');
+                    if (savedState) params.api.applyColumnState({ state: JSON.parse(savedState), applyOrder: true });
+                    initializeGrid();
+                }
+            };
+            agGrid.createGrid(eGridDiv, gridOptions);
+
+            deleteRowsBtn.addEventListener('click', async () => {
+                const selectedNodes = gridApi.getSelectedNodes();
+                const rowIndices = selectedNodes.map(node => node.rowIndex);
+
+                if (rowIndices.length === 0) {
+                    alert("No rows are selected to delete.");
+                    return;
+                }
+
+                if (!confirm(`Are you sure you want to permanently delete ${rowIndices.length} row(s)? This action cannot be undone.`)) {
+                    return;
+                }
+
+                deleteRowsBtn.disabled = true; // Disable during operation
+
+                try {
+                    const res = await fetch('/delete_rows', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ row_indices: rowIndices })
+                    });
+                    const result = await res.json();
+                    if (!res.ok) throw new Error(result.error);
+
+                    alert(result.message);
+                    if (window.updateUndoRedoStatus) window.updateUndoRedoStatus();
+                    window.location.reload();
+                } catch (error) {
+                    alert(`Error deleting rows: ${error.message}`);
+                    // Re-enable the button only if the operation fails
+                    deleteRowsBtn.disabled = rowIndices.length === 0;
+                }
+            });
+
+            targetColumnSelect.addEventListener('change', () => {
+                const selectedColumn = targetColumnSelect.value;
+                if (selectedColumn) {
+                    updateSidebarForColumn(selectedColumn);
+                }
+            });
+
+            async function initializeGrid() {
+                try {
+                    const response = await fetch('/get_schema_details');
+                    const data = await response.json();
+                    if (data.error || !data.columns) throw new Error(data.error || 'Invalid schema format.');
+                    
+                    columnsWithTypes = data.columns;
+
+                    targetColumnSelect.innerHTML = columnsWithTypes.map(c => `<option value="${c.name}">${c.name}</option>`).join('');
+                    if (columnsWithTypes.length > 0) {
+                        updateSidebarForColumn(columnsWithTypes[0].name);
+                    }
+                    
+                    const columnDefs = data.columns.map((p, index) => {
+                        const isNumeric = ['BIGINT', 'DOUBLE', 'INTEGER', 'FLOAT', 'DECIMAL'].some(type => p.type.includes(type));
+                        const def = {
+                            field: p.name,
+                            headerName: p.name,
+                            filter: isNumeric ? 'agNumberColumnFilter' : 'agTextColumnFilter',
+                        };
+                        return def;
+                    });
+                    
+                    gridApi.setGridOption('columnDefs', columnDefs);
+                    
+                    const dataSource = {
+                        getRows: (params) => {
+                            fetch('/get_ag_grid_rows', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ startRow: params.startRow, endRow: params.endRow, sortModel: params.sortModel, filterModel: params.filterModel }) })
+                            .then(res => res.json())
+                            .then(data => data.error ? params.failCallback() : params.successCallback(data.rows, data.lastRow))
+                            .catch(() => params.failCallback());
+                        }
+                    };
+                    gridApi.setGridOption('datasource', dataSource);
+                } catch (error) { console.error("Failed to initialize grid:", error); }
+            }
+
+            // --- TAB SWITCHING LOGIC ---
+            tabNav.addEventListener('click', (event) => {
+                if (event.target.classList.contains('tab-btn')) {
+                    const tabName = event.target.dataset.tab;
+                    document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.remove('active'));
+                    document.querySelectorAll('.tab-pane').forEach(pane => pane.classList.remove('active'));
+                    event.target.classList.add('active');
+                    document.getElementById(`tab-${tabName}`).classList.add('active');
+                }
+            });
+            
+            // --- COLUMN OPERATIONS LOGIC ---
+            const opDetails = {
+                convert: { title: "Convert Data Type" },
+                rename: { title: "Rename Column" },
+                merge: { title: "Merge Columns" },
+                split: { title: "Split Column" },
+                drop: { title: "Drop Columns" },
+                actions: { title: "Bulk Actions" }
+            };
+            
+            function closeAllDropdowns() {
+                document.querySelectorAll('.op-dropdown').forEach(d => d.classList.remove('show'));
+            }
+
+            document.querySelectorAll('.op-header-btn').forEach(button => {
+                button.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    const op = button.dataset.op;
+                    const dropdown = document.getElementById(`dropdown-${op}`);
+                    const isAlreadyOpen = dropdown.classList.contains('show');
+                    closeAllDropdowns();
+                    if (!isAlreadyOpen) {
+                        renderOperationControls(op, dropdown);
+                        dropdown.classList.add('show');
+                    }
+                    if (op === 'actions') { // Special handling for the actions dropdown
+                        const selectedNodes = gridApi.getSelectedNodes();
+                        if (selectedNodes.length === 0) {
+                            alert("Please select one or more rows first.");
+                            return; // Don't open the dropdown if nothing is selected
+                        }
+                    }
+                });
+            });
+            
+            window.addEventListener('click', closeAllDropdowns);
+
+            function renderOperationControls(operation, container) {
+                // This function dynamically builds the HTML form for a given operation.
+                let controlsHtml = `<h4>${opDetails[operation].title}</h4>`;
+                
+                // Prepare reusable lists of columns for dropdowns and checklists
+                const allColOptsWithTypes = columnsWithTypes.map(c => `<option value="${c.name}" data-type="${c.type}">${c.name}</option>`).join('');
+                const allColOpts = columnsWithTypes.map(c => `<option value="${c.name}">${c.name}</option>`).join('');
+                const textColOpts = columnsWithTypes.filter(c => c.type.includes('VARCHAR')).map(c => `<option value="${c.name}">${c.name}</option>`).join('');
+                const checklist = columnsWithTypes.map(c => `<div class="checklist-item"><input type="checkbox" id="op-col-${c.name}-${operation}" name="op_cols" value="${c.name}"><label for="op-col-${c.name}-${operation}">${c.name}</label></div>`).join('');
+
+                switch(operation) {
+                    case 'convert':
+                        // Get type of the first column as default
+                        const initialType = columnsWithTypes.length > 0 ? columnsWithTypes[0].type : 'Unknown';
+                        
+                        controlsHtml += `
+                            <div class="control-group">
+                                <label>Column to Convert</label>
+                                <select id="convert-col">${allColOptsWithTypes}</select>
+                            </div>
+                            <p id="current-type-display" style="font-size: 12px; color: #a095c0; margin-top: -5px; margin-bottom: 15px;">
+                                Current Type: <strong style="color: #E0D9F0;">${initialType}</strong>
+                            </p>
+                            <div class="control-group">
+                                <label>Target Data Type</label>
+                                <select id="convert-target">
+                                    <option value="numeric">Numeric (Int/Float)</option>
+                                    <option value="string">Text (String)</option>
+                                    <option value="datetime">Datetime</option>
+                                    <option value="boolean">Boolean</option>
+                                    <option value="categorical">Categorical</option>
+                                </select>
+                            </div>`;
+                        break;
+                    case 'rename':
+                        controlsHtml += `<div class="control-group"><label>Column to Rename</label><select id="rename-old">${allColOpts}</select></div><div class="control-group"><label>New Name</label><input type="text" id="rename-new" placeholder="Enter new name"></div>`;
+                        break;
+                    case 'merge':
+                        controlsHtml += `<div class="control-group"><label>Columns to Merge (select 2+)</label><div class="checklist-container">${checklist}</div></div><div class="control-group"><label>Separator</label><input type="text" id="merge-sep" value=" "></div><div class="control-group"><label>New Column Name</label><input type="text" id="merge-new" placeholder="e.g., full_name"><div class="inline-checkbox"><input type="checkbox" id="merge-drop"><label for="merge-drop">Drop originals</label></div></div>`;
+                        break;
+                    case 'split':
+                        controlsHtml += `<div class="control-group"><label>Column to Split (Text only)</label><select id="split-col">${textColOpts}</select></div><div class="control-group"><label>Delimiter</label><input type="text" id="split-delim" value=" "></div><div class="control-group"><label>New Names (comma-separated)</label><input type="text" id="split-new" placeholder="e.g., first_name,last_name"><div class="inline-checkbox"><input type="checkbox" id="split-drop"><label for="split-drop">Drop original</label></div></div>`;
+                        break;
+                    case 'drop':
+                        controlsHtml += `<div class="control-group"><label>Columns to Drop</label><div class="checklist-container">${checklist}</div></div>`;
+                        break;
+                    
+                    // --- NEW CASE FOR BULK ACTIONS ---
+                    case 'actions':
+                        const selectedCount = gridApi ? gridApi.getSelectedRows().length : 0;
+                        controlsHtml += `
+                            <p style="font-size: 13px; color: #a095c0; margin-top: -5px;">
+                                Actions will be applied to the <strong>${selectedCount}</strong> selected row(s).
+                            </p>
+                            <div class="control-group">
+                                <button class="apply-op-btn" id="delete-selected-btn" style="background-color: #dc3545;">
+                                    Delete ${selectedCount} Row(s)
+                                </button>
+                            </div>`;
+                        break;
+                }
+
+                // Add a generic "Apply" button for most operations, but not for 'actions' as its button is specific
+                if (operation !== 'actions') {
+                    controlsHtml += `<button class="apply-op-btn">Apply</button>`;
+                }
+                
+                controlsHtml += `<div class="status-message"></div>`;
+                container.innerHTML = controlsHtml;
+
+                // After rendering the HTML, attach the corresponding event listeners.
+                addOperationListeners(operation, container);
+            }
+
+            function addOperationListeners(operation, container) {
+                // Prevent the dropdown from closing when a user clicks inside it.
+                container.addEventListener('click', e => e.stopPropagation());
+
+                if (operation === 'convert') {
+                    const colSelect = container.querySelector('#convert-col');
+                    const typeDisplay = container.querySelector('#current-type-display strong');
+                    
+                    if (colSelect && typeDisplay) {
+                        colSelect.addEventListener('change', () => {
+                            // Get the type from the data attribute of the selected option
+                            const selectedOption = colSelect.options[colSelect.selectedIndex];
+                            const currentType = selectedOption.dataset.type;
+                            typeDisplay.textContent = currentType;
+                        });
+                    }
+                }
+                
+                // Find the primary action button within the dropdown
+                const btn = container.querySelector('.apply-op-btn');
+                const status = container.querySelector('.status-message');
+                
+                if (!btn) return;
+
+                btn.addEventListener('click', async () => {
+                    let endpoint = '';
+                    let payload = {};
+                    if(status) status.textContent = 'Processing...';
+                    btn.disabled = true;
+
+                    try {
+                        // 1. Determine endpoint and payload based on the operation
+                        switch(operation) {
+                            case 'convert':
+                                endpoint = '/convert_column_type'; // We will create this route
+                                payload = {
+                                    column_name: container.querySelector('#convert-col').value,
+                                    target_type: container.querySelector('#convert-target').value
+                                };
+                                break;
+                            case 'rename':
+                                endpoint = '/rename_column';
+                                payload = { old_name: container.querySelector('#rename-old').value, new_name: container.querySelector('#rename-new').value };
+                                break;
+                            case 'merge':
+                                endpoint = '/merge_columns';
+                                payload = { columns_to_merge: Array.from(container.querySelectorAll('input[name="op_cols"]:checked')).map(cb => cb.value), new_column_name: container.querySelector('#merge-new').value, separator: container.querySelector('#merge-sep').value, drop_originals: container.querySelector('#merge-drop').checked };
+                                break;
+                            case 'split':
+                                endpoint = '/split_column';
+                                payload = { column_to_split: container.querySelector('#split-col').value, delimiter: container.querySelector('#split-delim').value, new_column_names: container.querySelector('#split-new').value, drop_original: container.querySelector('#split-drop').checked };
+                                break;
+                            case 'drop':
+                                endpoint = '/drop_columns';
+                                payload = { columns_to_drop: Array.from(container.querySelectorAll('input[name="op_cols"]:checked')).map(cb => cb.value) };
+                                if (payload.columns_to_drop.length > 0 && !confirm(`Permanently delete ${payload.columns_to_drop.length} column(s)?`)) {
+                                    throw new Error("Operation cancelled.");
+                                }
+                                break;
+                            case 'actions':
+                                const selectedNodes = gridApi.getSelectedNodes();
+                                const rowIndices = selectedNodes.map(node => node.rowIndex);
+
+                                if (rowIndices.length === 0) {
+                                    throw new Error("No rows were selected.");
+                                }
+                                if (!confirm(`Are you sure you want to delete ${rowIndices.length} row(s)? This action cannot be undone.`)) {
+                                    throw new Error("Operation cancelled.");
+                                }
+                                endpoint = '/delete_rows';
+                                payload = { row_indices: rowIndices };
+                                break;
+                        }
+
+                        if (!endpoint) throw new Error("Operation could not be determined.");
+
+                        // 2. Make the unified API call
+                        const res = await fetch(endpoint, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
+                        const result = await res.json();
+                        if (!res.ok) throw new Error(result.error);
+                        
+                        // 3. Handle success by reloading the page
+                        alert(result.message);
+                        window.location.reload();
+
+                    } catch (error) {
+                        // 4. Handle any errors during the process
+                        if (status) {
+                            status.textContent = `Error: ${error.message}`;
+                        } else {
+                            alert(`Error: ${error.message}`);
+                        }
+                        btn.disabled = false; // Re-enable button only on error
+                    }
+                });
+            }
+
+            // --- Sidebar and Charting Logic ---
+            function updateSidebarForColumn(columnName) {
+                if (columnName === currentColumn) return;
+                currentColumn = columnName;
+                sidebarTop.innerHTML = '<h2>Column Inspector</h2><p class="placeholder">Loading details...</p>';
+                relationshipContainer.innerHTML = '<p style="padding-top: 20px; color: #a095c0;">Calculating...</p>';
+                valuesContainer.innerHTML = '<p style="padding-top: 20px; color: #a095c0;">Loading...</p>';
+                fetch(`/column_details/${encodeURIComponent(columnName)}`).then(res => res.json()).then(data => { if (data.error) throw new Error(data.error); renderSidebarTopContent(data); renderValuesTabContent(data); }).catch(err => sidebarTop.innerHTML = `<h2>Error</h2><p class="placeholder">${err.message}</p>`);
+                fetch(`/all_relationships/${encodeURIComponent(columnName)}`).then(res => res.json()).then(results => { if (results.error) throw new Error(results.error); renderRelationshipsTabContent(results); }).catch(err => relationshipContainer.innerHTML = `<p style="color:#ffc107;">${err.message}</p>`);
+            }
+
+            function renderSidebarTopContent(data) {
+                let statsHtml = '', summaryLineHtml = '', chartHtml = '';
+                const isNumeric = ['BIGINT', 'DOUBLE', 'INTEGER', 'FLOAT', 'DECIMAL'].some(type => data.type.includes(type));
+
+                if (isNumeric) {
+                    const stats = data.stats;
+                    // Build the grid of stats for numerical columns
+                    statsHtml = `
+                        <div class="stat-item"><span class="stat-label">Count</span><span class="stat-value">${stats.count || 'N/A'}</span></div>
+                        <div class="stat-item"><span class="stat-label">Cardinality</span><span class="stat-value">${stats.cardinality || 'N/A'}</span></div>
+                        <div class="stat-item"><span class="stat-label">Mean</span><span class="stat-value">${stats.mean || 'N/A'}</span></div>
+                        <div class="stat-item"><span class="stat-label">Std. Deviation</span><span class="stat-value">${stats.std || 'N/A'}</span></div>
+                        <div class="stat-item"><span class="stat-label">Sum</span><span class="stat-value">${stats.sum || 'N/A'}</span></div>
+                        <div class="stat-item"><span class="stat-label">Coeff. of Variation</span><span class="stat-value">${stats.CV || 'N/A'}</span></div>
+                        <div class="stat-item"><span class="stat-label">Skewness</span><span class="stat-value">${stats.skew || 'N/A'}</span></div>
+                        <div class="stat-item"><span class="stat-label">Kurtosis</span><span class="stat-value">${stats.kurtosis || 'N/A'}</span></div>
+                        <div class="stat-item"><span class="stat-label">Range</span><span class="stat-value">${stats.range || 'N/A'}</span></div>
+                        <div class="stat-item"><span class="stat-label">IQR</span><span class="stat-value">${stats.IQR || 'N/A'}</span></div>
+                        <div class="stat-item"><span class="stat-label">% Zeros</span><span class="stat-value">${stats['zeros_%'] || '0.000'}%</span></div>
+                    `;
+
+                    // --- NEW: Generate the 5-number summary line with FIXED positions ---
+                    const min = parseFloat(stats.min);
+                    const max = parseFloat(stats.max);
+
+                    // Only render if we have valid min/max numbers to display
+                    if (!isNaN(min) && !isNaN(max)) {
+                        summaryLineHtml = `
+                            <div class="summary-line-container">
+                                <div class="summary-line">
+                                    <!-- Min Point (0%) -->
+                                    <div class="summary-label-group" style="left: 0%;">
+                                        <span class="summary-label">Min</span>
+                                        <span class="summary-value">${stats.min}</span>
+                                    </div>
+                                    <div class="summary-point" style="left: 0%;"></div>
+
+                                    <!-- Q1 Point (25%) -->
+                                    <div class="summary-label-group" style="left: 25%;">
+                                        <span class="summary-label">Q1</span>
+                                        <span class="summary-value">${stats['25%']}</span>
+                                    </div>
+                                    <div class="summary-point" style="left: 25%;"></div>
+
+                                    <!-- Median Point (50%) -->
+                                    <div class="summary-label-group" style="left: 50%;">
+                                        <span class="summary-label">Median</span>
+                                        <span class="summary-value">${stats['50%']}</span>
+                                    </div>
+                                    <div class="summary-point median" style="left: 50%;"></div>
+
+                                    <!-- Q3 Point (75%) -->
+                                    <div class="summary-label-group" style="left: 75%;">
+                                        <span class="summary-label">Q3</span>
+                                        <span class="summary-value">${stats['75%']}</span>
+                                    </div>
+                                    <div class="summary-point" style="left: 75%;"></div>
+
+                                    <!-- Max Point (100%) -->
+                                    <div class="summary-label-group" style="left: 100%;">
+                                        <span class="summary-label">Max</span>
+                                        <span class="summary-value">${stats.max}</span>
+                                    </div>
+                                    <div class="summary-point" style="left: 100%;"></div>
+                                </div>
+                            </div>
+                        `;
+                    }
+
+                } else { // Categorical
+                    const stats = data.stats;
+                    statsHtml = `
+                        <div class="stat-item"><span class="stat-label">Cardinality</span><span class="stat-value">${stats.cardinality}</span></div>
+                        <div class="stat-item" style="grid-column: 2 / -1;"><span class="stat-label">Mode</span><span class="stat-value" style="white-space: normal; word-break: break-all;">${stats.mode}</span></div>
+                        <div class="stat-item"><span class="stat-label">Min Length</span><span class="stat-value">${stats.min_length}</span></div>
+                        <div class="stat-item"><span class="stat-label">Max Length</span><span class="stat-value">${stats.max_length}</span></div>
+                        <div class="stat-item"><span class="stat-label">Avg. Length</span><span class="stat-value">${stats.avg_length}</span></div>
+                        <div class="stat-item"><span class="stat-label">Std. Dev. Length</span><span class="stat-value">${stats.std_dev_length}</span></div>
+                    `;
+                }
+                
+                // Set the final HTML, appending the new visualization if it exists
+                sidebarTop.innerHTML = `
+                    <h2>${data.name}</h2>
+                    <p style="color: #a095c0; margin-top: -10px; margin-bottom: 20px;">Type: ${data.type}</p>
+                    ${summaryLineHtml}
+                    <div class="stats-grid">${statsHtml}</div>
+                `;
+                
+                if (activeChart) { if (typeof activeChart === 'object' && activeChart !== null) Object.values(activeChart).forEach(chart => chart.destroy()); else if (activeChart.destroy) activeChart.destroy(); }
+                activeChart = {};
+
+                const barCtx = document.getElementById('details-chart-bar')?.getContext('2d');
+                const pieCtx = document.getElementById('details-chart-pie')?.getContext('2d');
+                const treemapCtx = document.getElementById('details-chart-treemap')?.getContext('2d');
+
+                if (isNumeric && barCtx && data.histogram) {
+                    activeChart['bar'] = new Chart(barCtx, { type: 'bar', data: { labels: data.histogram.map(bin => bin.x.toFixed(2)), datasets: [ { type: 'bar', label: 'Frequency', data: data.histogram.map(bin => bin.y), backgroundColor: '#9D4EDD' } ] }, options: { scales: { x: { ticks: { color: '#a095c0' } }, y: { beginAtZero: true, ticks: { color: '#a095c0' } } }, plugins: { legend: { display: false } } } });
+                } else if (!isNumeric && barCtx && pieCtx && treemapCtx && data.frequency_chart_data) {
+                    const chartData = data.frequency_chart_data;
+                    const labels = chartData.map(item => String(item.category));
+                    const values = chartData.map(item => item.count);
+                    const pieColors = ['#9D4EDD', '#7B2CBF', '#5A189A', '#C77DFF', '#3C096C', '#240046', '#E0AAFF'];
+                    activeChart['bar'] = new Chart(barCtx, { type: 'bar', data: { labels: labels, datasets: [{ label: 'Count', data: values, backgroundColor: '#9D4EDD' }] }, options: { indexAxis: 'y', plugins: { legend: { display: false } }, scales: { x: { ticks: { color: '#a095c0' } }, y: { ticks: { color: '#a095c0' } } } } });
+                    activeChart['pie'] = new Chart(pieCtx, { type: 'pie', data: { labels: labels, datasets: [{ label: 'Count', data: values, backgroundColor: pieColors, borderColor: '#161220', borderWidth: 2 }] }, options: { plugins: { legend: { display: true, position: 'bottom', labels: { color: '#E0D9F0' } } } } });
+                    activeChart['treemap'] = new Chart(treemapCtx, { type: 'treemap', data: { datasets: [{ label: 'Count', tree: chartData.map(item => ({ category: item.category, value: item.count })), key: 'value', groups: ['category'], backgroundColor: (ctx) => { if (ctx.type !== 'data') return 'transparent'; return pieColors[ctx.dataIndex % pieColors.length]; }, fontColor: 'white', borderColor: '#161220' }] }, options: { plugins: { legend: { display: false }, tooltip: { callbacks: { label: function(c) { return `${c.raw.g}: ${c.raw.v.toLocaleString()}`; } } } } } });
+                }
+            }
+
+            function renderValuesTabContent(data) {
+                // This function is complete and correct from the previous version
+                const isNumeric = ['BIGINT', 'DOUBLE', 'INTEGER', 'FLOAT', 'DECIMAL'].some(type => data.type.includes(type));
+                if (isNumeric) {
+                    valuesContainer.innerHTML = `<div class="values-table-container"><div class="values-controls"><input type="text" id="value-filter" class="search-input" placeholder="Filter (e.g., >100, 50-75)"><button class="sort-btn active" data-sort="desc">High → Low</button><button class="sort-btn" data-sort="asc">Low → High</button></div><div id="values-list" class="values-list"><p style="padding: 10px; color: #a095c0;">Loading values...</p></div></div>`;
+                } else {
+                    valuesContainer.innerHTML = `<div class="freq-table-container"><input type="text" id="freq-search" class="search-input" placeholder="Search categories..."><div class="freq-table"><table><thead><tr><th>Category</th><th>Count</th></tr></thead><tbody id="freq-table-body">${data.full_frequency.map(item => `<tr data-value="${String(item.category).replace(/"/g, '&quot;')}"><td>${String(item.category)}</td><td>${item.count.toLocaleString()}</td></tr>`).join('')}</tbody></table></div></div>`;
+                }
+                const searchInput = document.getElementById('freq-search');
+                if (searchInput) { searchInput.addEventListener('keyup', () => { const filter = searchInput.value.toUpperCase(); document.querySelectorAll('#freq-table-body tr').forEach(row => { row.style.display = row.cells[0].textContent.toUpperCase().indexOf(filter) > -1 ? "" : "none"; }); }); }
+                const freqTableBody = document.getElementById('freq-table-body');
+                if (freqTableBody) { freqTableBody.addEventListener('click', (event) => { const row = event.target.closest('tr'); if (row && row.dataset.value && gridApi) { const filterModel = { [data.name]: { filterType: 'text', type: 'equals', filter: row.dataset.value } }; gridApi.setFilterModel(filterModel); } }); }
+                const valuesListDiv = document.getElementById('values-list');
+                if (valuesListDiv) { let sortOrder = 'desc'; const fetchValues = async () => { valuesListDiv.innerHTML = `<p style="padding: 10px; color: #a095c0;">Loading...</p>`; const filterValue = document.getElementById('value-filter').value; const response = await fetch(`/column_values/${encodeURIComponent(data.name)}?sort=${sortOrder}&filter=${encodeURIComponent(filterValue)}`); const result = await response.json(); valuesListDiv.innerHTML = result.error ? `<p style="color: #ffc107;">Error: ${result.error}</p>` : result.values.length === 0 ? `<p>No values found.</p>` : result.values.map(v => `<div class="value-item" data-value="${v}">${v.toLocaleString()}</div>`).join(''); }; fetchValues(); document.querySelectorAll('.sort-btn').forEach(button => button.addEventListener('click', () => { document.querySelectorAll('.sort-btn').forEach(btn => btn.classList.remove('active')); button.classList.add('active'); sortOrder = button.dataset.sort; fetchValues(); })); let debounceTimer; document.getElementById('value-filter').addEventListener('keyup', () => { clearTimeout(debounceTimer); debounceTimer = setTimeout(fetchValues, 500); }); }
+            }
+
+            function renderRelationshipsTabContent(results) {
+                // This function is complete and correct from the previous version
+                if (results.length === 0) { relationshipContainer.innerHTML = `<p style="padding-top:20px; color:#a095c0;">No other columns to compare with.</p>`; return; }
+                relationshipContainer.innerHTML = `<div class="relationship-list">${results.map(res => `<div class="relationship-item"><div><div class="col-name">${res.column_name}</div><div class="interp">${res.interpretation}</div><div class="progress-bar-container"><div class="progress-bar-fill" style="width: ${res.progress_value}%;"></div></div></div><div class="score-box"><div class="score-value">${res.score}</div><div class="score-name">${res.score_name}</div></div></div>`).join('')}</div>`;
+            }
+        });
+    </script>
+{% endblock %}

@@ -1,0 +1,433 @@
+{% extends "base.html" %}
+
+{% block title %}Custom Expressions{% endblock %}
+
+{% block head_content %}
+    <script src="https://unpkg.com/ag-grid-community/dist/ag-grid-community.min.js"></script>
+    <style>
+        /* AG Grid Dark Theme */
+        .ag-theme-alpine-dark {
+            --ag-background-color: #121212;
+            --ag-foreground-color: #E0D9F0;
+            --ag-border-color: #2e2e2e;
+            --ag-header-background-color: #1f1f1f;
+            --ag-header-foreground-color: #FFFFFF;
+            --ag-header-cell-hover-background-color: #2C2541;
+            --ag-list-item-height: 42px;
+            --ag-row-height: 32px; 
+            --ag-row-background-color: #171717;
+            --ag-row-hover-color: #2C2541;
+            --ag-odd-row-background-color: #171717;
+            --ag-icon-color: #a095c0;
+            --ag-range-selection-border-color: #9D4EDD;
+            --ag-range-selection-background-color: rgba(157, 78, 221, 0.2);
+            --ag-selected-row-background-color: rgba(157, 78, 221, 0.25);
+            --ag-modal-overlay-background-color: rgba(30, 25, 43, 0.6);
+            --ag-input-wrapper-background-color: #1E192B;
+        }
+
+        .operators-sidebar, .ag-body-vertical-scroll-viewport, .ag-body-horizontal-scroll-viewport { scrollbar-width: thin; scrollbar-color: #313131 #171717; }
+
+        .expression-layout { display: flex; height: 100%; overflow: hidden; }
+
+        /* --- Left Sidebar (Operators & Functions) --- */
+        .operators-sidebar {
+            width: 280px;
+            flex-shrink: 0;
+            background-color: #171717;
+            border-right: 1px solid #2e2e2e;
+            padding: 20px;
+            overflow-y: auto;
+        }
+        .operators-sidebar h4 { margin: 15px 0 10px 0; color: #FFFFFF; border-bottom: 1px solid #2C2541; padding-bottom: 5px; }
+        .op-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(80px, 1fr)); gap: 8px; }
+        .op-btn {
+            padding: 8px; background-color: #1f1f1f; border: 1px solid #2e2e2e;
+            color: #E0D9F0; border-radius: 5px; cursor: pointer; transition: background-color 0.2s;
+            font-family: monospace; font-size: 12px; text-align: center;
+        }
+        .op-btn:hover { background-color: #2e2e2e; }
+        .column-list { margin-top: 15px; }
+        .column-btn { width: 100%; text-align: left; margin-bottom: 5px; }
+
+        /* --- Main Content (Editor & Preview) --- */
+        .expression-main {
+            flex-grow: 1;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+        .editor-container {
+            flex-shrink: 0;
+            display: flex;
+            flex-direction: column;
+            margin-bottom: 20px;
+        }
+
+        /* AI Generator Styles */
+        .ai-generator {
+            display: flex;
+            margin-bottom: 10px;
+            align-items: center;
+        }
+        #ai-prompt-input {
+            flex-grow: 1;
+            padding: 8px;
+            border-radius: 0px;
+            border: 1px solid #2e2e2e;
+            background-color: #171717;
+            color: #E0D9F0;
+            font-size: 14px;
+        }
+        #ai-generate-btn { background-color: #1f1f1f; color: #898989; border: 1px solid #2e2e2e; padding: 10px 15px; border-radius: 0px; font-size: 0.7em; font-weight: 500; cursor: pointer; transition: all 0.2s; }
+        #ai-generate-btn:hover { background-color: #2C2541; color: white; }
+        #ai-generate-btn:disabled { background-color: #0F0F0F; color: #4d4d4d; border: none; cursor: not-allowed;}
+        
+        #expression-area {
+            width: 100%;
+            height: 120px;
+            background-color: #1f1f1f;
+            border: none;
+            border-top: 1px solid #2e2e2e;
+            border-bottom: 1px solid #2e2e2e;
+            border-radius: 0px;
+            color: #E0D9F0;
+            font-family: 'Courier New', Courier, monospace;
+            font-size: 16px;
+            padding: 10px;
+            box-sizing: border-box;
+            resize: none;
+        }
+        .controls-bar {
+            display: flex;
+            align-items: center;
+            margin-top: 10px;
+        }
+        .controls-bar input {
+            flex-grow: 1;
+            padding: 8px;
+            border-radius: 0px;
+            border: 1px solid #2e2e2e;
+            background-color: #171717;
+            color: #E0D9F0;
+        }
+        .apply-btn {
+            background-color: #1E192B;
+            color: #9D4EDD;
+            padding: 8px 25px;
+            border: 1px solid #9D4EDD;
+            border-radius: 0px;
+            font-size: 14px;
+            font-weight: 500;
+            cursor: pointer;
+            transition: background-color 0.2s;
+        }
+        .apply-btn:hover { background-color: #9D4EDD; color: #fff; }    
+        .apply-btn:disabled { background-color: #0F0F0F; color: #4d4d4d; border: none; cursor: not-allowed; }
+        .status-message { flex-basis: 100%; text-align: center; color: #a095c0; font-size: 14px; margin-top: 10px; }
+
+        /* --- NEW: Grid Wrapper --- */
+        .grid-wrapper {
+            flex-grow: 1;
+            overflow: hidden;
+            border-radius: 0px;
+        }
+        #myGrid {
+            width: 100%;
+            height: 100%;
+        }
+        .ag-root-wrapper { border-color: #2e2e2e !important; border-radius: 0px !important; }
+    </style>
+{% endblock %}
+
+{% block content %}
+<div class="expression-layout">
+
+    <aside class="operators-sidebar" id="operators-sidebar">
+        <h3>Builder</h3>
+        <h4>Columns</h4>
+        <div class="column-list" id="column-list"><p style="font-size: 12px; color: #a095c0;">Loading...</p></div>
+
+        <h4>Arithmetic & Comparison</h4>
+        <div class="op-grid">
+            <button class="op-btn" data-insert="+">+</button>
+            <button class="op-btn" data-insert="-">-</button>
+            <button class="op-btn" data-insert="*">*</button>
+            <button class="op-btn" data-insert="/">/</button>
+            <button class="op-btn" data-insert="=">=</button>
+            <button class="op-btn" data-insert="!=">!=</button>
+            <button class="op-btn" data-insert=">">&gt;</button>
+            <button class="op-btn" data-insert="<">&lt;</button>
+        </div>
+
+        <h4>Logic</h4>
+        <div class="op-grid">
+            <button class="op-btn" data-insert="AND">AND</button>
+            <button class="op-btn" data-insert="OR">OR</button>
+            <button class="op-btn" data-insert="NOT">NOT</button>
+            <button class="op-btn" data-insert="IS NULL">IS NULL</button>
+        </div>
+
+        <h4>Aggregates</h4>
+        <div class="op-grid">
+            <button class="op-btn" data-insert="AVG()">AVG()</button>
+            <button class="op-btn" data-insert="SUM()">SUM()</button>
+            <button class="op-btn" data-insert="COUNT()">COUNT()</button>
+            <button class="op-btn" data-insert="MAX()">MAX()</button>
+            <button class="op-btn" data-insert="MIN()">MIN()</button>
+            <button class="op-btn" data-insert="STDDEV()">STDDEV()</button>
+            <button class="op-btn" data-insert="VARIANCE()">VARIANCE()</button>
+        </div>
+
+        <h4>Math</h4>
+        <div class="op-grid">
+            <button class="op-btn" data-insert="ABS()">ABS()</button>
+            <button class="op-btn" data-insert="ROUND(col, 2)">ROUND()</button>
+            <button class="op-btn" data-insert="SQRT()">SQRT()</button>
+            <button class="op-btn" data-insert="LOG()">LOG()</button>
+            <button class="op-btn" data-insert="LOG10()">LOG10()</button>
+            <button class="op-btn" data-insert="EXP()">EXP()</button>
+            <button class="op-btn" data-insert="POWER(col, 2)">POWER()</button>
+        </div>
+
+        <h4>String</h4>
+        <div class="op-grid">
+            <button class="op-btn" data-insert="LOWER()">LOWER()</button>
+            <button class="op-btn" data-insert="UPPER()">UPPER()</button>
+            <button class="op-btn" data-insert="LENGTH()">LENGTH()</button>
+            <button class="op-btn" data-insert="TRIM()">TRIM()</button>
+            <button class="op-btn" data-insert="SUBSTRING(col FROM 1 FOR 3)">SUBSTRING()</button>
+            <button class="op-btn" data-insert="CONCAT(col1, col2)">CONCAT()</button>
+        </div>
+        
+        <h4>Conditionals</h4>
+        <div class="op-grid">
+             <button class="op-btn" style="grid-column: 1 / -1;" data-insert="CASE WHEN condition THEN result ELSE other_result END">CASE WHEN</button>
+        </div>
+        
+        <h4>Window Functions</h4>
+        <div class="op-grid">
+            <button class="op-btn" style="grid-column: 1 / -1; font-size: 12px;" data-insert="ROW_NUMBER() OVER (PARTITION BY col1 ORDER BY col2)">ROW_NUMBER()</button>
+            <button class="op-btn" style="grid-column: 1 / -1; font-size: 12px;" data-insert="RANK() OVER (PARTITION BY col1 ORDER BY col2)">RANK()</button>
+            <button class="op-btn" style="grid-column: 1 / -1; font-size: 12px;" data-insert="LAG(col, 1) OVER (ORDER BY col)">LAG()</button>
+            <button class="op-btn" style="grid-column: 1 / -1; font-size: 12px;" data-insert="LEAD(col, 1) OVER (ORDER BY col)">LEAD()</button>
+            <button class="op-btn" style="grid-column: 1 / -1; font-size: 12px;" data-insert="SUM(col) OVER (PARTITION BY group_col)">Cumulative Sum</button>
+        </div>
+    </aside>
+
+    <main class="expression-main">
+        <div class="editor-container">
+            <div class="ai-generator">
+                <input type="text" id="ai-prompt-input" placeholder="✨ Describe the formula you want (e.g., 'increase SalePrice by 10%')">
+                <button id="ai-generate-btn">Generate</button>
+            </div>
+            <textarea id="expression-area" placeholder='Or write your expression here, e.g., "SalePrice" * 1.1'></textarea>
+            <div class="controls-bar">
+                <input type="text" id="new-col-name" placeholder="New Column Name">
+                <button class="apply-btn" id="apply-btn">Apply Expression</button>
+            </div>
+            <div id="status-message" class="status-message"></div>
+        </div>
+        <!-- THIS IS THE CHANGE: Replaced table wrapper with AG Grid div -->
+        <div class="grid-wrapper">
+            <div id="myGrid" class="ag-theme-alpine-dark"></div>
+        </div>
+    </main>
+</div>
+{% endblock %}
+
+{% block body_scripts %}
+<script>
+document.addEventListener('DOMContentLoaded', () => {
+    // --- Page Elements ---
+    const operatorsSidebar = document.getElementById('operators-sidebar');
+    const columnListDiv = document.getElementById('column-list');
+    const expressionArea = document.getElementById('expression-area');
+    const applyBtn = document.getElementById('apply-btn');
+    const newColNameInput = document.getElementById('new-col-name');
+    const statusMessageDiv = document.getElementById('status-message');
+    const aiPromptInput = document.getElementById('ai-prompt-input');
+    const aiGenerateBtn = document.getElementById('ai-generate-btn');
+    const gridDiv = document.querySelector('#myGrid');
+    
+    let columnsWithTypes = [];
+
+    // --- NEW: AG Grid Setup ---
+    let gridApi;
+    const gridOptions = {
+        defaultColDef: { sortable: true, filter: true, resizable: true, minWidth: 150 },
+        rowModelType: 'infinite',
+        cacheBlockSize: 100,
+        maxBlocksInCache: 10,
+        // Add this line to treat field names with dots as a single key
+        suppressFieldDotNotation: true,
+        onGridReady: (params) => {
+            gridApi = params.api;
+            // The datasource will be initialized after we get the schema
+            initializeView();
+        }
+    };
+    agGrid.createGrid(gridDiv, gridOptions);
+
+    async function initializeGridDataSource() {
+        if (!gridApi) return;
+        try {
+            const response = await fetch('/get_schema_details');
+            const data = await response.json();
+            if (data.error || !data.columns) throw new Error(data.error || 'Invalid schema format.');
+            
+            const columnDefs = data.columns.map(p => ({
+                field: p.name,
+                headerName: p.name,
+                filter: ['BIGINT', 'DOUBLE', 'INTEGER', 'FLOAT', 'DECIMAL'].some(type => p.type.includes(type))
+                    ? 'agNumberColumnFilter' : 'agTextColumnFilter',
+            }));
+            gridApi.setGridOption('columnDefs', columnDefs);
+
+            const dataSource = {
+                getRows: (params) => {
+                    // Use the server-side endpoint for AG Grid
+                    fetch('/get_ag_grid_serverside_rows', {
+                        method: 'POST', headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(params) // AG Grid provides the necessary params
+                    })
+                    .then(res => res.json())
+                    .then(data => data.error ? params.failCallback() : params.successCallback(data.rows, data.lastRow))
+                    .catch(() => params.failCallback());
+                }
+            };
+            gridApi.setGridOption('datasource', dataSource);
+        } catch (error) {
+            console.error("Failed to initialize grid:", error);
+        }
+    }
+
+    // --- Core Functions ---
+    async function initializeView() {
+        try {
+            const response = await fetch('/get_schema_details');
+            const data = await response.json();
+            if (data.error) throw new Error(data.error);
+            columnsWithTypes = data.columns;
+            populateColumnList();
+            // This is now called after the grid is ready and we have the schema
+            await initializeGridDataSource();
+        } catch (error) {
+            console.error("Initialization failed:", error);
+            columnListDiv.innerHTML = `<p style="font-size: 12px; color: #ffc107;">Error loading columns.</p>`;
+        }
+    }
+
+    function populateColumnList() {
+        columnListDiv.innerHTML = columnsWithTypes.map(c => 
+            `<button class="op-btn column-btn" data-insert='"${c.name}"'>${c.name}</button>`
+        ).join('');
+    }
+
+    // --- Event Listeners ---
+    operatorsSidebar.addEventListener('click', (e) => {
+        if (e.target.matches('.op-btn')) {
+            const textToInsert = e.target.dataset.insert;
+            const start = expressionArea.selectionStart;
+            const end = expressionArea.selectionEnd;
+            const text = expressionArea.value;
+            expressionArea.value = text.substring(0, start) + " " + textToInsert + " " + text.substring(end);
+            expressionArea.focus();
+            const cursorPos = start + textToInsert.indexOf('(') + 2;
+            if (cursorPos > start + 1 && textToInsert.includes('()')) {
+                expressionArea.setSelectionRange(cursorPos, cursorPos);
+            } else {
+                expressionArea.setSelectionRange(start + textToInsert.length + 2, start + textToInsert.length + 2);
+            }
+        }
+    });
+
+    applyBtn.addEventListener('click', async () => {
+        const expression = expressionArea.value;
+        const newColName = newColNameInput.value;
+        statusMessageDiv.textContent = 'Processing...';
+        statusMessageDiv.style.color = '#a095c0';
+        applyBtn.disabled = true;
+        try {
+            const response = await fetch('/apply_expression', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ expression: expression, new_column_name: newColName })
+            });
+            const result = await response.json();
+            if (result.error) throw new Error(result.error);
+            statusMessageDiv.textContent = result.message;
+            statusMessageDiv.style.color = '#28a745';
+            
+            // --- UPDATED: Reload the page to refresh the grid ---
+            window.location.reload();
+
+        } catch (error) {
+            statusMessageDiv.textContent = `Error: ${error.message}`;
+            statusMessageDiv.style.color = '#dc3545';
+            applyBtn.disabled = false; // Re-enable only on failure
+        }
+    });
+    
+    aiGenerateBtn.addEventListener('click', async () => {
+        const userPrompt = aiPromptInput.value.trim();
+        if (!userPrompt) {
+            alert("Please describe the formula you want to generate.");
+            return;
+        }
+        if (columnsWithTypes.length === 0) {
+            alert("Schema is still loading. Please wait a moment and try again.");
+            return;
+        }
+
+        aiGenerateBtn.disabled = true;
+        aiGenerateBtn.textContent = 'Generating...';
+
+        try {
+            // --- Step 1: Generate the context string on the client-side ---
+            let context = '### AVAILABLE FUNCTIONS\n';
+            context += '- Basic Arithmetic: +, -, *, /\n';
+            context += '- Aggregates: MAX("col"), MIN("col"), AVG("col"), SUM("col")\n';
+            context += '- Conditionals: CASE WHEN condition THEN result ELSE other_result END\n';
+            context += '- Math: ABS("col"), ROUND("col", decimals), SQRT("col"), LOG("col")\n';
+            context += '- String: LOWER("col"), UPPER("col"), LENGTH("col"), TRIM("col")\n\n';
+
+            context += '### DATASET SCHEMA\n';
+            context += '| Column Name | Data Type |\n';
+            context += '|---|---|\n';
+            columnsWithTypes.forEach(col => {
+                context += `| ${col.name} | ${col.type} |\n`;
+            });
+            
+            // --- Step 2: Call the API with the generated context ---
+            const response = await fetch('/generate_expression', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ 
+                    prompt: userPrompt,
+                    context: context // Send the context we just built
+                })
+            });
+            const result = await response.json();
+            if (result.error) throw new Error(result.error);
+
+            // --- Step 3: Handle the result (same as before) ---
+            if (result.expression && result.expression !== '0') {
+                expressionArea.value = result.expression;
+                const suggestedName = userPrompt.split(' ').slice(0, 3).join('_').replace(/[^a-zA-Z0-9_]/g, '') + '_AI';
+                newColNameInput.value = suggestedName;
+            } else {
+                alert("The AI could not generate a valid expression from your description. Please try being more specific.");
+            }
+        } catch (error) {
+            alert(`An error occurred: ${error.message}`);
+        } finally {
+            aiGenerateBtn.disabled = false;
+            aiGenerateBtn.textContent = 'Generate';
+        }
+    });
+
+    // --- Initial Load is handled by the onGridReady callback ---
+});
+</script>
+{% endblock %}

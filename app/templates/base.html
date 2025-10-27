@@ -1,0 +1,1308 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}Data Analytics App{% endblock %}</title>
+    
+    {% block head_content %}{% endblock %}
+    
+    <style>
+        /* General Layout Styles */
+        html, body {
+            height: 100%;
+            margin: 0;
+            overflow: hidden;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            background-color: #1E1B2B;
+            color: #E0D9F0;
+        }
+
+        /* --- ADDED: Top Navigation Bar --- */
+        .top-nav-bar {
+            height: 50px;
+            width: 100%;
+            background-color: #171717;
+            border-bottom: 1px solid #2e2e2e;
+            display: flex;
+            align-items: center;
+            padding: 0 20px;
+            box-sizing: border-box;
+            flex-shrink: 0; /* Prevent the navbar from shrinking */
+        }
+        .top-nav-content {
+            width: 100%;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .top-nav-brand {
+            font-size: 1.2em;
+            font-weight: bold;
+            color: #FFFFFF;
+        }
+        .top-nav-user {
+            display: flex;
+            align-items: center;
+            gap: 15px;
+        }
+        .user-email {
+            color: #a095c0;
+            font-size: 14px;
+        }
+        .logout-button {
+            background-color: #2C2541;
+            color: #E0D9F0;
+            padding: 6px 12px;
+            border-radius: 5px;
+            text-decoration: none;
+            font-size: 12px;
+            font-weight: 500;
+            border: 1px solid #4a3f6e;
+            transition: all 0.2s ease;
+        }
+        .logout-button:hover {
+            background-color: #9D4EDD;
+            border-color: #9D4EDD;
+            color: white;
+        }
+        /* --- END ADDED STYLES --- */
+
+        /* --- MODIFIED: Main App Layout --- */
+        .app-layout {
+            display: flex;
+            /* The height is now calculated to fill the space *below* the 50px navbar */
+            height: calc(100vh - 50px);
+            background-color: #171717;
+        }
+
+        /* Side Navigation Bar (Unchanged) */
+        .side-nav {
+            width: 60px;
+            flex-shrink: 0;
+            background-color: #171717;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            padding-top: 15px;
+            border-right: 1px solid #2e2e2e;
+        }
+
+        .main-nav {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+
+        .nav-item {
+            width: 38px;
+            height: 38px;
+            margin-bottom: 10px;
+            background-color: #0F0F0F;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            position: relative;
+            transition: all 0.2s ease-in-out;
+        }
+        .nav-item:hover, .nav-item.active {
+            border-radius: 15px;
+            background-color: #313131;
+        }
+        .nav-item svg {
+            width: 20px;
+            height: 20px;
+            stroke: #E0D9F0;
+            stroke-width: 2;
+        }
+
+        /* --- MODIFIED: Main Content Area --- */
+        .app-main-content {
+            flex-grow: 1;
+            /* The height is now 100% of its parent (.app-layout), not the viewport */
+            height: 100%;
+            display: flex;
+            flex-direction: column;
+            min-width: 0;
+        }
+        .page-content-wrapper {
+            flex-grow: 1;
+            overflow-y: auto;
+            min-height: 0;
+        }
+
+        /* Status Bar Styles (Unchanged, but some items removed) */
+        .app-status-bar {
+            height: 25px;
+            background-color: #0F0F0F;
+            border-top: 1px solid #2e2e2e;
+            display: flex;
+            align-items: center;
+            padding: 0 15px;
+            font-size: 12px;
+            color: #a095c0;
+            gap: 20px;
+            flex-shrink: 0;
+        }
+        .status-item {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+        .status-item svg {
+            width: 14px;
+            height: 14px;
+            stroke: #a095c0;
+            stroke-width: 2;
+        }
+        .status-item span {
+            font-weight: 500;
+            color: #E0D9F0;
+        }
+
+        /* Generic Dropdown & Button Styles (Unchanged) */
+        .export-container { position: relative; }
+        .export-btn, .undo-redo-btn {
+            display: flex; align-items: center; gap: 6px;
+            background: none; border: none; color: #a095c0;
+            font-size: 12px; font-family: inherit; cursor: pointer;
+            padding: 0 5px; height: 100%;
+        }
+        .export-btn:hover:not(:disabled), .undo-redo-btn:hover:not(:disabled) { background-color: #2C2541; }
+        .undo-redo-btn:disabled { color: #4a3f6e; cursor: not-allowed; }
+        .undo-redo-btn:disabled svg { stroke: #4a3f6e; }
+
+        .status-dropdown {
+            display: none; position: absolute; bottom: 100%; right: 0;
+            background-color: #1f1f1f; border: 1px solid #2e2e2e; border-radius: 5px;
+            z-index: 1000; box-shadow: 0 8px 16px rgba(0,0,0,0.3);
+            max-height: 400px; overflow-y: auto;
+        }
+        .status-dropdown.show { display: block; }
+        
+        .export-dropdown { min-width: 100px; left:0; right:auto; }
+        .export-item { display: block; padding: 8px 12px; color: #E0D9F0; text-decoration: none; font-size: 12px; }
+        .export-item:hover { background-color: #9D4EDD; color: white; }
+        
+        .chat-log-dropdown { width: 350px; }
+        .log-item { padding: 8px 12px; border-bottom: 1px solid #2C2541; }
+        .log-item:last-child { border-bottom: none; }
+        .log-user { font-weight: bold; color: #E0D9F0; margin-bottom: 4px; font-size: 13px; }
+        .log-ai { font-size: 12px; color: #a095c0; line-height: 1.4; }
+        .no-logs { padding: 20px; text-align: center; color: #a095c0; }
+        
+        .formula-history-dropdown { width: 400px; }
+        .history-item { padding: 8px 12px; border-bottom: 1px solid #2C2541; }
+        .history-item:last-child { border-bottom: none; }
+        .history-col { font-weight: bold; color: #E0D9F0; margin-bottom: 4px; font-size: 13px; }
+        .history-expr { font-size: 12px; color: #a095c0; font-family: 'Courier New', Courier, monospace; background-color: #161220; padding: 4px 6px; border-radius: 4px; word-break: break-all; }
+        .no-history { padding: 20px; text-align: center; color: #a095c0; }
+
+        .sql-log-dropdown { width: 450px; }
+        .sql-log-item { padding: 8px 12px; border-bottom: 1px solid #2C2541; }
+        .sql-log-item:last-child { border-bottom: none; }
+        .sql-query { font-size: 12px; color: #a095c0; font-family: 'Courier New', Courier, monospace; background-color: #161220; padding: 4px 6px; border-radius: 4px; word-break: break-all; margin-bottom: 4px; }
+        .sql-status { font-size: 12px; font-weight: bold; }
+        .sql-status.success { color: #28a745; }
+        .sql-status.failed { color: #dc3545; }
+        .no-sql-history { padding: 20px; text-align: center; color: #a095c0; }
+
+        /* Health Check Sidebar Styles (Unchanged) */
+        .health-sidebar { width: 60px; flex-shrink: 0; background-color: #1f1f1f; border-left: 1px solid #2e2e2e; display: flex; flex-direction: column; align-items: center; padding-top: 15px; gap: 15px; }
+        .health-item { position: relative; width: 32px; height: 32px; background-color: #0F0F0F; border: 2px solid #363636; border-radius: 8px; display: flex; align-items: center; justify-content: center; cursor: help; }
+        .health-item .status-icon { position: absolute; bottom: -5px; right: -5px; width: 18px; height: 18px; border-radius: 50%; display: flex; align-items: center; justify-content: center; border: 2px solid #161220; }
+        .health-item .status-icon.passed { background-color: #28a745; }
+        .health-item .status-icon.failed { background-color: #dc3545; }
+        .health-item .status-icon svg { width: 10px; height: 10px; stroke: white; stroke-width: 3; }
+        .health-item .main-icon svg { width: 18px; height: 18px; stroke: #E0D9F0; stroke-width: 2; }
+        .health-item .tooltip { visibility: hidden; width: 220px; background-color: #0F0F0F; border: 1px solid #2e2e2e; color: #fff; text-align: center; border-radius: 6px; padding: 8px; position: absolute; z-index: 100; right: 120%; opacity: 0; transition: opacity 0.3s; }
+        .health-item .tooltip::after { content: ""; position: absolute; top: 50%; left: 100%; margin-top: -5px; border-width: 5px; border-style: solid; border-color: transparent transparent transparent #4a3f6e; }
+        .health-item:hover .tooltip { visibility: visible; opacity: 1; }
+        .tooltip-title { font-weight: bold; margin-bottom: 5px; padding-bottom: 5px; border-bottom: 1px solid #4a3f6e; }
+        .tooltip-details { font-size: 12px; color: #a095c0; }
+
+        /* --- ADDED/MODIFIED for Centered Filename --- */
+        .top-nav-content {
+            width: 100%;
+            display: grid;
+            grid-template-columns: 1fr auto 1fr; /* Left, Center, Right columns */
+            align-items: center;
+        }
+        .top-nav-brand {
+            justify-self: start; /* Align brand to the start of its grid cell */
+        }
+        .top-nav-center {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            color: #a095c0;
+            font-size: 14px;
+            justify-self: center; /* Center the element in its grid cell */
+        }
+        .top-nav-center svg {
+            width: 16px;
+            height: 16px;
+            stroke: #a095c0;
+            stroke-width: 2;
+        }
+        .top-nav-center span {
+            font-weight: 500;
+            color: #E0D9F0;
+        }
+        /* --- ADDED: User Menu Dropdown --- */
+        .top-nav-user {
+            justify-self: end;
+            position: relative; /* Required for dropdown positioning */
+        }
+        .user-menu-btn {
+            background-color: #0F0F0F;
+            border: 1px solid #363636;
+            border-radius: 50%;
+            width: 36px;
+            height: 36px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            transition: background-color 0.2s;
+        }
+        .user-menu-btn:hover {
+            background-color: #4a3f6e;
+        }
+        .user-menu-btn svg {
+            width: 20px;
+            height: 20px;
+            stroke: #a095c0;
+        }
+
+        .user-menu-dropdown {
+            display: none; /* Hidden by default */
+            position: absolute;
+            top: calc(100% + 10px); /* Position below the button */
+            right: 0;
+            width: 280px;
+            background-color: #1f1f1f;
+            border: 1px solid #2e2e2e;
+            border-radius: 8px;
+            box-shadow: 0 8px 16px rgba(0,0,0,0.3);
+            z-index: 1001;
+            padding: 15px;
+        }
+        .user-menu-dropdown.show {
+            display: block; /* Show when active */
+        }
+        .user-info-header {
+            border-bottom: 1px solid #4a3f6e;
+            padding-bottom: 10px;
+            margin-bottom: 10px;
+        }
+        .user-info-header .email {
+            font-weight: 500;
+            color: #FFFFFF;
+            word-break: break-all;
+        }
+        .user-info-item {
+            display: flex;
+            justify-content: space-between;
+            font-size: 14px;
+            margin-bottom: 8px;
+        }
+        .info-label {
+            color: #a095c0;
+        }
+        .info-value {
+            font-weight: 500;
+            color: #E0D9F0;
+        }
+        .user-menu-dropdown .logout-button {
+            width: 100%;
+            text-align: center;
+            margin-top: 15px;
+            background-color: #dc3545;
+            border-color: #dc3545;
+        }
+        .admin-dashboard-button {
+            display: block;
+            width: 100%;
+            text-align: center;
+            margin-top: 15px;
+            background-color: #1E192B;
+            border: 1px solid #9D4EDD;
+            color: #9D4EDD;
+            padding: 8px 12px;
+            border-radius: 5px;
+            text-decoration: none;
+            font-size: 0.7em;
+            font-weight: 500;
+            transition: all 0.2s ease;
+            box-sizing: border-box;
+        }
+        .admin-dashboard-button:hover {
+            background-color: #9D4EDD;
+            color: #fff;
+        }
+        /* --- ADDED for Top Nav Actions --- */
+        .top-nav-action-btn {
+            background-color: #242424;
+            border: 1px solid #363636;
+            border-radius: 9999px;
+            height: 30px;
+            padding: 0 12px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            color: #E0D9F0;
+            cursor: pointer;
+            transition: background-color 0.2s;
+            font-size: 0.7em;
+            font-weight: 500;
+        }
+        .top-nav-action-btn:hover {
+            border-color: #424242;
+        }
+        .top-nav-action-btn svg {
+            width: 16px;
+            height: 16px;
+            stroke: #a095c0;
+        }
+        .top-nav-user .export-container {
+            position: relative; /* Ensure dropdown is positioned relative to the container */
+        }
+        .top-nav-user .export-dropdown {
+            top: calc(100% + 10px); /* Position dropdown below the button */
+            bottom: auto; /* Unset the 'bottom' property from the status bar style */
+            right: 0;
+            left: auto;
+        }
+        /* --- ADDED for AI Button --- */
+        .top-nav-ai-btn {
+            background-color: #1E192B; /* Dark background */
+            border: 1px solid #9D4EDD; /* Purple border to stand out */
+            color: #9D4EDD; /* Purple text */
+            border-radius: 9999px;
+            height: 30px;
+            padding: 0 12px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            font-size: 0.7em;
+            font-weight: 500;
+            text-decoration: none; /* Remove underline from the link */
+        }
+        .top-nav-ai-btn:hover {
+            background-color: #9D4EDD;
+            color: white;
+        }
+        .top-nav-ai-btn svg {
+            stroke: #9D4EDD; /* Match text color */
+            transition: stroke 0.2s;
+        }
+        .top-nav-ai-btn:hover svg {
+            stroke: white; /* Change icon color on hover */
+        }
+        /* --- ADDED: AI Chat Modal Styles --- */
+        #ai-chat-modal-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(30, 25, 43, 0.6); /* Semi-transparent background */
+            backdrop-filter: blur(5px);
+            z-index: 2000;
+            display: none; /* Hidden by default */
+            justify-content: center;
+            align-items: center;
+        }
+        #ai-chat-modal {
+            width: 90%;
+            max-width: 840px;
+            height: 80vh;
+            max-height: 700px;
+            background-color: #171717;
+            border: 2px solid #2e2e2e;
+            border-radius: 12px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+        .ai-modal-header {
+            padding: 15px 20px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            border-bottom: 1px solid #2C2541;
+            flex-shrink: 0;
+        }
+        .ai-modal-header h3 {
+            margin: 0;
+            color: #FFFFFF;
+        }
+        .ai-modal-close-btn {
+            background: none;
+            border: none;
+            font-size: 24px;
+            color: #a095c0;
+            cursor: pointer;
+            line-height: 1;
+        }
+        #ai-chat-modal-container {
+            flex-grow: 1;
+            padding: 20px;
+            overflow-y: auto;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+        #ai-chat-modal-form {
+            padding: 20px;
+            border-top: 1px solid #2C2541;
+            display: flex;
+            gap: 10px;
+            flex-shrink: 0;
+        }
+        #ai-chat-modal-input {
+            flex-grow: 1;
+            padding: 10px;
+            border-radius: 8px;
+            border: 1px solid #363636;
+            background-color: #1f1f1f;
+            color: #fafafa;
+            font-size: 14px;
+        }
+        #ai-chat-modal-form button {
+            padding: 0 20px;
+            border: none;
+            background-color: #9D4EDD;
+            color: white;
+            border-radius: 8px;
+            font-size: 14px;
+            font-weight: 500;
+            cursor: pointer;
+        }
+        #ai-chat-modal-form button:disabled {
+            background-color: #5a6268;
+            cursor: not-allowed;
+        }
+        /* Message styles (can be shared with your original insights page styles if you have them) */
+        .message { max-width: 95%; padding: 10px 15px; border-radius: 18px; line-height: 1.4; font-size: 14px; }
+        .user-message { background-color: #9D4EDD; color: white; align-self: flex-end; border-bottom-right-radius: 4px; }
+        .ai-message { background-color: #1f1f1f; color: #fafafa; align-self: flex-start; border-bottom-left-radius: 4px; }
+        .ai-message.thinking { font-style: italic; color: #a095c0; }
+        .ai-message.error { background-color: #492328; color: #ffc107; }
+        .ai-message strong { color: #c77dff; }
+
+
+
+        /* --- Global Job Status Toaster Styles --- */
+        #global-job-toaster {
+            position: fixed;
+            bottom: 35px; /* Position above the main status bar */
+            right: 20px;
+            background-color: #1f1f1f;
+            border: 1px solid #2e2e2e;
+            border-radius: 8px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+            padding: 15px;
+            width: 320px;
+            z-index: 3000;
+            display: none; /* Hidden by default */
+            font-size: 14px;
+            transition: opacity 0.3s ease-in-out;
+        }
+        .toaster-header {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            color: #FFFFFF;
+            font-weight: 500;
+            margin-bottom: 10px;
+        }
+        .toaster-loader {
+            width: 18px;
+            height: 18px;
+            border: 3px solid #4a3f6e;
+            border-top: 3px solid #9D4EDD;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+        }
+        .toaster-status-text {
+            color: #a095c0;
+            margin-bottom: 12px;
+        }
+        .toaster-progress-bar-container {
+            width: 100%;
+            background-color: #161220;
+            border-radius: 5px;
+            overflow: hidden;
+        }
+        .toaster-progress-bar {
+            width: 0%;
+            height: 10px;
+            background-color: #9D4EDD;
+            transition: width 0.4s ease;
+        }
+        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+
+
+
+        /* --- ADDED: UI Locking Styles --- */
+        .ui-locked .op-header-btn,
+        .ui-locked .nav-item,
+        .ui-locked #delete-rows-btn,
+        .ui-locked .ag-root-wrapper {
+            opacity: 0.5;
+            pointer-events: none;
+            cursor: not-allowed !important;
+        }
+        .ui-locked .ag-cell {
+            cursor: not-allowed !important;
+        }
+    </style>
+</head>
+<body>
+
+    <!-- ADDED: The new top navigation bar -->
+    <header class="top-nav-bar">
+        <div class="top-nav-content">
+            <div class="top-nav-brand">
+                <img src="{{ url_for('static', filename='img/logo.png') }}" alt="DataWarp Logo" style="height: 30px; vertical-align: middle;">
+            </div>
+            <div class="top-nav-center">
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M13 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"></path><polyline points="13 2 13 9 20 9"></polyline></svg>
+                <span>{{ session.get('filename', 'No file loaded') }}</span>
+            </div>
+            <div class="top-nav-user">
+                {% if session['user'] %}
+                    <!-- START: ADDED BUTTONS -->
+                    <button class="top-nav-action-btn" id="new-data-btn">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
+                        New
+                    </button>
+                    <button class="top-nav-action-btn" id="save-data-btn">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"></path><polyline points="17 21 17 13 7 13 7 21"></polyline><polyline points="7 3 7 8 15 8"></polyline></svg>
+                        Save
+                    </button>
+                    <button class="top-nav-action-btn" id="save-as-data-btn">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="12" y1="18" x2="12" y2="12"></line><line x1="9" y1="15" x2="15" y2="15"></line></svg>
+                        Save As...
+                    </button>
+                    <!-- END: ADDED BUTTONS -->
+
+                    <button class="top-nav-ai-btn" id="ask-ai-nav-btn">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m12 3-1.45 4.75L6 9l4.75 1.45L12 15l1.45-4.75L21 9l-4.75-1.45z"/></svg>
+                        Ask AI
+                    </button>
+                    
+                    <div class="export-container">
+                        <button class="top-nav-action-btn" id="export-btn">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
+                            Export
+                        </button>
+                        <div class="status-dropdown export-dropdown" id="export-dropdown">
+                            <a href="#" class="export-item" data-format="csv">CSV</a>
+                            <a href="#" class="export-item" data-format="tsv">TSV</a>
+                            <a href="#" class="export-item" data-format="xlsx">XLSX (Modern Excel)</a>
+                            <a href="#" class="export-item" data-format="xls">XLS (Legacy Excel)</a>
+                            <a href="#" class="export-item" data-format="txt">TXT (Space-separated)</a>
+                        </div>
+                    </div>
+
+                    <!-- The new User Icon Button -->
+                    <button class="user-menu-btn" id="user-menu-btn" title="User Menu">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path><circle cx="12" cy="7" r="4"></circle></svg>
+                    </button>
+
+                    <!-- The new Dropdown Panel -->
+                    <div class="user-menu-dropdown" id="user-menu-dropdown">
+                        <div class="user-info-header">
+                            <div class="email">{{ session['user']['email'] }}</div>
+                        </div>
+                        <div class="user-info-item">
+                            <span class="info-label">Organization:</span>
+                            <span class="info-value">{{ session.get('org_name', 'N/A') }}</span>
+                        </div>
+                        <div class="user-info-item">
+                            <span class="info-label">Role:</span>
+                            <span class="info-value">{{ session.get('role', 'user') | capitalize }}</span>
+                        </div>
+                        {% if session.get('role') == 'admin' %}
+                        <a href="{{ url_for('admin_dashboard') }}" class="admin-dashboard-button">Admin Dashboard</a>
+                        {% endif %}
+                        <hr style="border-color: #4a3f6e; margin-top: 15px;">
+                        <a href="{{ url_for('logout') }}" class="logout-button">Logout</a>
+                    </div>
+                {% endif %}
+            </div>
+        </div>
+    </header>
+
+    <div class="app-layout">
+        <nav class="side-nav">
+            <!-- Unified Navigation Container -->
+            <div class="main-nav">
+                <a href="{{ url_for('data_preview') }}" class="nav-item {% if request.endpoint == 'data_preview' %}active{% endif %}" title="Data Preview"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="20" x2="12" y2="10"></line><line x1="18" y1="20" x2="18" y2="4"></line><line x1="6" y1="20" x2="6" y2="16"></line></svg></a>
+                <a href="{{ url_for('data_cleaner') }}" class="nav-item {% if request.endpoint == 'data_cleaner' %}active{% endif %}" title="Data Cleaner"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="4" y1="21" x2="4" y2="14"></line><line x1="4" y1="10" x2="4" y2="3"></line><line x1="12" y1="21" x2="12" y2="12"></line><line x1="12" y1="8" x2="12" y2="3"></line><line x1="20" y1="21" x2="20" y2="16"></line><line x1="20" y1="12" x2="20" y2="3"></line><line x1="1" y1="14" x2="7" y2="14"></line><line x1="9" y1="8" x2="15" y2="8"></line><line x1="17" y1="16" x2="23" y2="16"></line></svg></a>
+                <a href="{{ url_for('sql_view') }}" class="nav-item {% if request.endpoint == 'sql_view' %}active{% endif %}" title="SQL Lab"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path></svg></a>
+                <a href="{{ url_for('formulate_view') }}" class="nav-item {% if request.endpoint == 'formulate_view' %}active{% endif %}" title="Formulate"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect><line x1="12" y1="8" x2="12" y2="16"></line><line x1="8" y1="12" x2="16" y2="12"></line></svg></a>
+                <a href="{{ url_for('expression_view') }}" class="nav-item {% if request.endpoint == 'expression_view' %}active{% endif %}" title="Expressions"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 8V4H8" /><rect x="4" y="4" width="16" height="16" rx="2" /><path d="m10 12 5 5" /><path d="m15 12-5 5" /></svg></a>
+                <a href="{{ url_for('visualizations_view') }}" class="nav-item {% if request.endpoint == 'visualizations_view' %}active{% endif %}" title="Visualizations"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21.21 15.89A10 10 0 1 1 8.11 2.99"></path><path d="M22 12A10 10 0 0 0 12 2v10z"></path></svg></a>
+                <a href="{{ url_for('full_report') }}" class="nav-item {% if request.endpoint == 'full_report' %}active{% endif %}" title="Full Report"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line><polyline points="10 9 9 9 8 9"></polyline></svg></a>
+                <a href="{{ url_for('pipeline_creator') }}" class="nav-item {% if request.endpoint == 'pipeline_creator' %}active{% endif %}" title="Pipeline Creator"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect><line x1="12" y1="8" x2="12" y2="16"></line><line x1="8" y1="12" x2="16" y2="12"></line></svg></a>
+                <a href="{{ url_for('pipeline_comparator_view') }}" class="nav-item {% if request.endpoint == 'pipeline_comparator_view' %}active{% endif %}" title="Pipeline Comparator"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 4H6a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V6a2 2 0 0 0-2-2z"></path><path d="M12 18V6"></path><path d="M12 12h6"></path><path d="M6 12h2"></path></svg></a>
+            
+            </div>
+        </nav>
+
+        <main class="app-main-content" id="app-main-content">
+            <div class="page-content-wrapper">
+                {% block content %}{% endblock %}
+            </div>
+
+            <footer class="app-status-bar">
+                <div class="status-item">
+                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><line x1="8" y1="6" x2="21" y2="6"></line><line x1="8" y1="12" x2="21" y2="12"></line><line x1="8" y1="18" x2="21" y2="18"></line><line x1="3" y1="6" x2="3.01" y2="6"></line><line x1="3" y1="12" x2="3.01" y2="12"></line><line x1="3" y1="18" x2="3.01" y2="18"></line></svg>
+                    Rows: <span>{{ "{:,}".format(session.get('row_count', 0)) }}</span>
+                </div>
+                <div class="status-item">
+                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3h7a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-7m0-18H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h7m0-18v18"></path></svg>
+                    Columns: <span>{{ session.get('col_count', 0) }}</span>
+                </div>
+                <div class="status-item">
+                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><ellipse cx="12" cy="5" rx="9" ry="3"></ellipse><path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3"></path><path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"></path></svg>
+                    Size: <span>{{ session.get('file_size', 'N/A') }}</span>
+                </div>
+
+                <div class="status-item">
+                    <button class="undo-redo-btn" id="undo-btn" disabled>
+                        <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 7v6h-6"/><path d="M3 17a9 9 0 0 1 9-9 9 9 0 0 1 6 2.3l-3 2.7"/></svg>
+                        Undo
+                    </button>
+                </div>
+                <div class="status-item">
+                     <button class="undo-redo-btn" id="redo-btn" disabled>
+                        <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 17v-6h6"/><path d="M21 7a9 9 0 0 1-9 9 9 9 0 0 1-6-2.3l3-2.7"/></svg>
+                        Redo
+                    </button>
+                </div>
+
+                <div class="status-item export-container">
+                    <button class="export-btn" id="chat-log-btn">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path></svg>
+                        Chat Logs
+                    </button>
+                    <div class="status-dropdown chat-log-dropdown" id="chat-log-dropdown">
+                        <div id="chat-log-list"></div>
+                    </div>
+                </div>
+
+                <div class="status-item export-container">
+                    <button class="export-btn" id="formula-history-btn">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 8V4H8" /><rect x="4" y="4" width="16" height="16" rx="2" /><path d="m10 12 5 5" /><path d="m15 12-5 5" /></svg>
+                        Formula History
+                    </button>
+                    <div class="status-dropdown formula-history-dropdown" id="formula-history-dropdown">
+                        <div id="formula-history-list"></div>
+                    </div>
+                </div>
+
+                <div class="status-item export-container">
+                    <button class="export-btn" id="sql-log-btn">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><ellipse cx="12" cy="5" rx="9" ry="3"></ellipse><path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3"></path><path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"></path></svg>
+                        SQL Log
+                    </button>
+                    <div class="status-dropdown sql-log-dropdown" id="sql-log-dropdown">
+                        <div id="sql-log-list"></div>
+                    </div>
+                </div>
+
+                <!-- MOVED: User info and logout button have been moved to the top nav bar -->
+                
+                <div class="status-item" style="margin-left: auto;">
+                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"></polyline></svg>
+                    Memory: <span id="status-memory">-- MB</span>
+                </div>
+            </footer>
+        </main>
+        
+        <aside class="health-sidebar" id="health-sidebar">
+            <!-- Health icons will be dynamically populated -->
+        </aside>
+    </div>
+
+    <div id="ai-chat-modal-overlay">
+        <div id="ai-chat-modal">
+            <div class="ai-modal-header">
+                <h3>AI Assistant</h3>
+                <button class="ai-modal-close-btn" id="ai-modal-close-btn">&times;</button>
+            </div>
+            <div class="chat-container" id="ai-chat-modal-container">
+                <!-- Chat messages will be dynamically added here -->
+            </div>
+            <form class="chat-form" id="ai-chat-modal-form">
+                <input type="text" id="ai-chat-modal-input" placeholder="Ask about your data..." autocomplete="off">
+                <button type="submit">Send</button>
+            </form>
+        </div>
+    </div>
+
+    <!-- The HTML for our global toaster -->
+    <div id="global-job-toaster">
+        <div class="toaster-header">
+            <div class="toaster-loader"></div>
+            <span id="toaster-job-name"></span>
+        </div>
+        <p class="toaster-status-text" id="toaster-status-text"></p>
+        <div class="toaster-progress-bar-container">
+            <div class="toaster-progress-bar" id="toaster-progress-bar"></div>
+        </div>
+    </div>
+
+    {% block body_scripts %}{% endblock %}
+
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            // --- ADDED: AI Chat Modal Logic ---
+            const askAiNavBtn = document.getElementById('ask-ai-nav-btn');
+            const aiChatModalOverlay = document.getElementById('ai-chat-modal-overlay');
+            const aiChatModal = document.getElementById('ai-chat-modal');
+            const aiModalCloseBtn = document.getElementById('ai-modal-close-btn');
+            
+            const aiChatForm = document.getElementById('ai-chat-modal-form');
+            const aiChatInput = document.getElementById('ai-chat-modal-input');
+            const aiChatContainer = document.getElementById('ai-chat-modal-container');
+
+            const newDataBtn = document.getElementById('new-data-btn');
+            const saveDataBtn = document.getElementById('save-data-btn');
+            const saveAsDataBtn = document.getElementById('save-as-data-btn');
+
+            // --- NEW: Centralized Global Job Monitoring Logic ---
+            const toaster = document.getElementById('global-job-toaster');
+            const toasterJobName = document.getElementById('toaster-job-name');
+            const toasterStatusText = document.getElementById('toaster-status-text');
+            const toasterProgressBar = document.getElementById('toaster-progress-bar');
+            let activePollingInterval = null;
+
+            // --- MODIFIED: Global Job Monitoring Logic ---
+            const mainContentArea = document.getElementById('app-main-content'); // Get the main area
+
+            // This function is the single source of truth for polling
+            function pollGlobalJobStatus(jobId, jobName) {
+                // If we're already polling, don't start another one
+                if (activePollingInterval) {
+                    clearInterval(activePollingInterval);
+                }
+
+                // Reset UI for a new job
+                toasterJobName.textContent = jobName;
+                toasterProgressBar.style.backgroundColor = '#9D4EDD';
+                toaster.style.display = 'block';
+
+                activePollingInterval = setInterval(async () => {
+                    try {
+                        // Add `credentials: 'same-origin'` to ensure the session cookie is sent with the request.
+                        const response = await fetch(`/job_progress/${jobId}`, {
+                            credentials: 'same-origin' 
+                        });
+                        if (!response.ok) throw new Error('Network error.');
+                        const data = await response.json();
+
+                        toasterStatusText.textContent = data.status_message || 'Processing...';
+                        toasterProgressBar.style.width = `${data.progress}%`;
+
+                        if (data.status === 'finished' || data.status === 'failed') {
+                            clearInterval(activePollingInterval);
+                            activePollingInterval = null;
+                            fetch('/clear_job_status', { method: 'POST' }); // Clear session
+                            
+                            if (data.status === 'finished') {
+                                toasterStatusText.textContent = 'Completed successfully!';
+                                toasterProgressBar.style.backgroundColor = '#28a745';
+                            } else {
+                                toasterStatusText.textContent = `Failed: ${data.error}`;
+                                toasterProgressBar.style.backgroundColor = '#dc3545';
+                            }
+
+                            setTimeout(() => {
+                                toaster.style.display = 'none';
+                                window.location.reload();
+                            }, 4000);
+                        }
+                    } catch (error) {
+                        clearInterval(activePollingInterval);
+                        activePollingInterval = null;
+                        toasterStatusText.textContent = 'Error: Could not get job status.';
+                        setTimeout(() => { toaster.style.display = 'none'; }, 5000);
+                    }
+                }, 2000);
+            }
+
+            // --- THIS IS THE KEY ---
+            // Listen for the custom "job-started" event on the entire document
+            document.addEventListener('job-started', (event) => {
+                const { jobId, jobName } = event.detail;
+                if (jobId && jobName) {
+                    // --- THIS IS THE CHANGE ---
+                    // 1. Lock the UI immediately
+                    mainContentArea.classList.add('ui-locked');
+                    // 2. Start polling
+                    pollGlobalJobStatus(jobId, jobName);
+                }
+            });
+
+            // Check for an active job on every single page load
+            async function checkAndMonitorCurrentJob() {
+                try {
+                    const response = await fetch('/get_current_job', { credentials: 'same-origin' });
+                    const data = await response.json();
+                    if (data.job_id) {
+                        mainContentArea.classList.add('ui-locked');
+                        pollGlobalJobStatus(data.job_id, data.job_name);
+                    }
+                } catch (error) {
+                    console.error("Could not check for current job:", error);
+                }
+            }
+
+            checkAndMonitorCurrentJob();
+
+            if(newDataBtn) {
+                newDataBtn.addEventListener('click', () => {
+                    if (confirm('Are you sure? This will start a new session and any unsaved changes will be lost.')) {
+                        window.location.href = "{{ url_for('upload_file') }}";
+                    }
+                });
+            }
+
+            if(saveDataBtn) {
+                saveDataBtn.addEventListener('click', async () => {
+                    if (!confirm('This will overwrite the original source file with all changes made in this session. This action cannot be undone. Proceed?')) {
+                        return;
+                    }
+                    saveDataBtn.disabled = true;
+                    saveDataBtn.textContent = 'Saving...';
+
+                    try {
+                        // This new endpoint will start the background job
+                        const response = await fetch('/commit_state_to_source', { method: 'POST' });
+                        const result = await response.json();
+                        if (!response.ok) throw new Error(result.error);
+
+                        // Poll for the job's completion
+                        pollJobStatus(
+                            result.job_id,
+                            (finalResult) => { // onComplete
+                                alert(finalResult.message);
+                                saveDataBtn.disabled = false;
+                                saveDataBtn.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"></path><polyline points="17 21 17 13 7 13 7 21"></polyline><polyline points="7 3 7 8 15 8"></polyline></svg> Save';
+                            },
+                            (errorMsg) => { // onError
+                                alert(`Save failed: ${errorMsg}`);
+                                saveDataBtn.disabled = false;
+                                saveDataBtn.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"></path><polyline points="17 21 17 13 7 13 7 21"></polyline><polyline points="7 3 7 8 15 8"></polyline></svg> Save';
+                            }
+                        );
+                    } catch (error) {
+                        alert(`Error starting save operation: ${error.message}`);
+                        saveDataBtn.disabled = false;
+                        saveDataBtn.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"></path><polyline points="17 21 17 13 7 13 7 21"></polyline><polyline points="7 3 7 8 15 8"></polyline></svg> Save';
+                    }
+                });
+            }
+
+            if(saveAsDataBtn) {
+                saveAsDataBtn.addEventListener('click', async () => {
+                    const defaultFilename = "{{ session.get('filename', 'dataset.csv').replace('.csv', '_copy.csv') }}";
+                    const newFilename = prompt("Save the current state as a new file:", defaultFilename);
+
+                    if (!newFilename || !newFilename.trim()) {
+                        return; // User cancelled or entered an empty name
+                    }
+
+                    saveAsDataBtn.disabled = true;
+                    saveAsDataBtn.textContent = 'Saving...';
+
+                    try {
+                        // 1. Call a new endpoint to start the "Save As" job
+                        const response = await fetch('/save_state_as_new_file', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ new_filename: newFilename })
+                        });
+                        const result = await response.json();
+                        if (!response.ok) throw new Error(result.error);
+
+                        // 2. Poll for the job's completion
+                        pollJobStatus(
+                            result.job_id,
+                            (finalResult) => { // onComplete
+                                // 3. On success, call another endpoint to switch the server session to the new file
+                                fetch('/switch_session_to_file', {
+                                    method: 'POST',
+                                    headers: { 'Content-Type': 'application/json' },
+                                    body: JSON.stringify({ new_filepath: finalResult.new_filepath })
+                                }).then(switchRes => switchRes.json()).then(switchResult => {
+                                    if (switchResult.success) {
+                                        alert(`Successfully saved as '${finalResult.new_filename}'. You are now working on this new file.`);
+                                        window.location.href = '/preview'; // Reload the app to reflect the new session context
+                                    } else {
+                                        throw new Error(switchResult.error);
+                                    }
+                                });
+                            },
+                            (errorMsg) => { // onError for polling
+                                throw new Error(errorMsg);
+                            }
+                        );
+                    } catch (error) {
+                        alert(`Save As failed: ${error.message}`);
+                        saveAsDataBtn.disabled = false;
+                        saveAsDataBtn.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="12" y1="18" x2="12" y2="12"></line><line x1="9" y1="15" x2="15" y2="15"></line></svg> Save As...';
+                    }
+                });
+            }
+
+
+            function openChatModal() {
+                aiChatModalOverlay.style.display = 'flex';
+                // Fetch latest chat logs every time it's opened
+                fetchAndRenderChatLogs(aiChatContainer); // Pass the container to render into
+                aiChatInput.focus();
+            }
+
+            function closeChatModal() {
+                aiChatModalOverlay.style.display = 'none';
+            }
+
+            askAiNavBtn.addEventListener('click', openChatModal);
+            aiModalCloseBtn.addEventListener('click', closeChatModal);
+            aiChatModalOverlay.addEventListener('click', (e) => {
+                if (e.target === aiChatModalOverlay) {
+                    closeChatModal();
+                }
+            });
+
+            // Chat submission logic
+            aiChatForm.addEventListener('submit', async (e) => {
+                e.preventDefault();
+                const question = aiChatInput.value.trim();
+                if (!question) return;
+
+                addModalMessage(question, 'user');
+                aiChatInput.value = '';
+                aiChatInput.disabled = true;
+                aiChatForm.querySelector('button').disabled = true;
+                const thinkingMessageId = `modal-msg-${Date.now()}`;
+                addModalMessage('Thinking...', 'ai', true, thinkingMessageId);
+
+                try {
+                    const response = await fetch('/ask_ai_secure', { // Changed from /ask_ai
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ question })
+                    });
+
+                    const result = await response.json();
+                    if (result.error) throw new Error(result.error);
+                    updateModalAiMessage(thinkingMessageId, result.natural_language_answer, false);
+                } catch (error) {
+                    updateModalAiMessage(thinkingMessageId, `Sorry, an error occurred: ${error.message}`, true);
+                } finally {
+                    aiChatInput.disabled = false;
+                    aiChatForm.querySelector('button').disabled = false;
+                    aiChatInput.focus();
+                }
+            });
+
+            function addModalMessage(text, sender, isThinking = false, id = null) {
+                const messageDiv = document.createElement('div');
+                messageDiv.classList.add('message', `${sender}-message`);
+                if (isThinking) messageDiv.classList.add('thinking');
+                if (id) messageDiv.id = id;
+                messageDiv.textContent = text;
+                aiChatContainer.appendChild(messageDiv);
+                aiChatContainer.scrollTop = aiChatContainer.scrollHeight;
+            }
+
+            function updateModalAiMessage(id, newText, isError = false, sqlQuery = null) {
+                const messageDiv = document.getElementById(id);
+                if (!messageDiv) return;
+                
+                messageDiv.classList.remove('thinking');
+                if (isError) {
+                    messageDiv.classList.add('error');
+                    messageDiv.textContent = newText; // Use textContent for errors to prevent HTML injection
+                } else {
+                    // Convert markdown bold to <strong> tags
+                    let htmlContent = newText.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
+                    
+                    messageDiv.innerHTML = htmlContent;
+                }
+            }
+
+            // --- MODIFIED: `fetchAndRenderChatLogs` to be more generic ---
+            async function fetchAndRenderChatLogs(container = null) {
+                // If no container is passed, default to the status bar dropdown
+                const list = container || dropdowns.chat.list;
+                const noLogMessage = container ? '<div class="message ai-message">Hello! Ask me anything about your data.</div>' : '<div class="no-logs">No chat history.</div>';
+                
+                list.innerHTML = container ? '' : '<div class="no-logs">Loading...</div>';
+
+                try {
+                    const res = await fetch('/get_chat_logs');
+                    const logs = await res.json();
+                    if (logs.error) throw new Error(logs.error);
+                    if (logs.length === 0) {
+                        list.innerHTML = noLogMessage;
+                        return;
+                    }
+                    if (container) { // Render for modal
+                         list.innerHTML = logs.map(log => 
+                            `<div class="message user-message">${log.user}</div>
+                             <div class="message ai-message">${log.ai.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')}</div>`
+                        ).join('');
+                        list.scrollTop = list.scrollHeight;
+                    } else { // Render for status bar dropdown
+                        list.innerHTML = logs.map(log => `<div class="log-item"><div class="log-user">You: ${log.user}</div><div class="log-ai">AI: ${log.ai.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')}</div></div>`).join('');
+                    }
+                } catch (e) {
+                    const errorHtml = `<div class="no-logs" style="color:#ffc107;">Error: ${e.message}</div>`;
+                    if (container) {
+                        list.innerHTML = `<div class="message ai-message error">Error loading history: ${e.message}</div>`;
+                    } else {
+                        list.innerHTML = errorHtml;
+                    }
+                }
+            }
+
+
+
+
+
+            // Memory Usage Polling
+            const memorySpan = document.getElementById('status-memory');
+            async function updateMemoryUsage() {
+                try {
+                    const response = await fetch('/app_status');
+                    const data = await response.json();
+                    if (data.memory_usage) memorySpan.textContent = data.memory_usage;
+                } catch (error) { memorySpan.textContent = "Error"; }
+            }
+            updateMemoryUsage();
+            setInterval(updateMemoryUsage, 5000);
+
+            // --- All Dropdown Logic ---
+            const dropdowns = {
+                export: { btn: document.getElementById('export-btn'), dropdown: document.getElementById('export-dropdown') },
+                chat: { btn: document.getElementById('chat-log-btn'), dropdown: document.getElementById('chat-log-dropdown'), list: document.getElementById('chat-log-list'), fetcher: fetchAndRenderChatLogs },
+                formula: { btn: document.getElementById('formula-history-btn'), dropdown: document.getElementById('formula-history-dropdown'), list: document.getElementById('formula-history-list'), fetcher: fetchAndRenderFormulaHistory },
+                sql: { btn: document.getElementById('sql-log-btn'), dropdown: document.getElementById('sql-log-dropdown'), list: document.getElementById('sql-log-list'), fetcher: fetchAndRenderSqlHistory },
+                user: { btn: document.getElementById('user-menu-btn'), dropdown: document.getElementById('user-menu-dropdown') }
+            };
+
+            function closeAllDropdowns() {
+                Object.values(dropdowns).forEach(d => d.dropdown?.classList.remove('show'));
+            }
+
+            Object.values(dropdowns).forEach(d => {
+                if (d.btn && d.dropdown) {
+                    d.btn.addEventListener('click', e => {
+                        e.stopPropagation();
+                        const isShown = d.dropdown.classList.contains('show');
+                        closeAllDropdowns();
+                        if (!isShown) {
+                            if (d.fetcher) d.fetcher();
+                            d.dropdown.classList.add('show');
+                        }
+                    });
+                    d.dropdown.addEventListener('click', e => e.stopPropagation());
+                }
+            });
+
+            window.addEventListener('click', closeAllDropdowns);
+
+            const exportDropdown = document.getElementById('export-dropdown');
+    
+            // Reusable polling function if it's not already global
+            if (typeof window.pollJobStatus !== 'function') {
+                window.pollJobStatus = function(jobId, onComplete, onError) {
+                    const interval = setInterval(async () => {
+                        try {
+                            const response = await fetch(`/job_status/${jobId}`);
+                            const data = await response.json();
+                            if (data.status === 'finished') {
+                                clearInterval(interval);
+                                onComplete(data.result);
+                            } else if (data.status === 'failed') {
+                                clearInterval(interval);
+                                onError(data.error);
+                            }
+                        } catch (error) {
+                            clearInterval(interval);
+                            onError('Polling failed.');
+                        }
+                    }, 3000);
+                }
+            }
+
+            if (exportDropdown) {
+                exportDropdown.addEventListener('click', async (e) => {
+                    e.preventDefault();
+                    const target = e.target;
+                    if (!target.classList.contains('export-item')) return;
+
+                    const format = target.dataset.format;
+                    closeAllDropdowns(); // Assumes you have this function from before
+                    
+                    // Provide immediate feedback to the user
+                    alert(`Your export to .${format} has started. It will download automatically when ready.`);
+
+                    try {
+                        // 1. Dispatch the job
+                        const response = await fetch('/start_export_job', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ format: format })
+                        });
+
+                        if (response.status !== 202) {
+                            const errData = await response.json();
+                            throw new Error(errData.error || 'Failed to start export job.');
+                        }
+                        const data = await response.json();
+
+                        // 2. Poll for the result
+                        window.pollJobStatus(
+                            data.job_id,
+                            (finalResult) => { // onComplete
+                                const filename = finalResult.download_filename;
+                                if (filename) {
+                                    // 3. Trigger the download
+                                    const downloadUrl = `/download_export/${encodeURIComponent(filename)}`;
+                                    // Create a temporary link to trigger the browser's download prompt
+                                    const link = document.createElement('a');
+                                    link.href = downloadUrl;
+                                    link.setAttribute('download', filename);
+                                    document.body.appendChild(link);
+                                    link.click();
+                                    document.body.removeChild(link);
+                                } else {
+                                    alert('Export finished, but no filename was returned.');
+                                }
+                            },
+                            (errorMsg) => { // onError
+                                alert(`Export failed: ${errorMsg}`);
+                            }
+                        );
+                    } catch (error) {
+                        alert(`Error starting export: ${error.message}`);
+                    }
+                });
+            }
+            
+            async function fetchAndRenderFormulaHistory() {
+                const list = dropdowns.formula.list;
+                list.innerHTML = '<div class="no-history">Loading...</div>';
+                try {
+                    const res = await fetch('/get_formula_history'); const history = await res.json();
+                    if (history.error) throw new Error(history.error);
+                    if (history.length === 0) { list.innerHTML = '<div class="no-history">No formulas applied.</div>'; return; }
+                    list.innerHTML = history.map(item => `<div class="history-item"><div class="history-col">${item.column}:</div><div class="history-expr"><code>${item.expression}</code></div></div>`).join('');
+                } catch (e) { list.innerHTML = `<div class="no-history" style="color:#ffc107;">Error: ${e.message}</div>`; }
+            }
+            
+            async function fetchAndRenderSqlHistory() {
+                const list = dropdowns.sql.list;
+                list.innerHTML = '<div class="no-sql-history">Loading...</div>';
+                try {
+                    const res = await fetch('/get_sql_history'); const history = await res.json();
+                    if (history.error) throw new Error(history.error);
+                    if (history.length === 0) { list.innerHTML = '<div class="no-sql-history">No SQL queries run.</div>'; return; }
+                    list.innerHTML = history.map(item => {
+                        const statusClass = item.status.toLowerCase().includes('success') ? 'success' : 'failed';
+                        return `<div class="sql-log-item"><div class="sql-query"><code>${item.query}</code></div><div class="sql-status ${statusClass}">${item.status}</div></div>`
+                    }).join('');
+                } catch (e) { list.innerHTML = `<div class="no-sql-history" style="color:#ffc107;">Error: ${e.message}</div>`; }
+            }
+
+            // --- Undo/Redo Logic ---
+            const undoBtn = document.getElementById('undo-btn');
+            const redoBtn = document.getElementById('redo-btn');
+
+            // --- THIS IS THE CHANGE: Make the function global ---
+            async function updateUndoRedoStatus() {
+                try {
+                    const response = await fetch('/get_undo_redo_status');
+                    const status = await response.json();
+                    undoBtn.disabled = !status.can_undo;
+                    redoBtn.disabled = !status.can_redo;
+                } catch (error) { console.error("Could not update undo/redo status:", error); }
+            }
+            // Expose it to the global window object so other scripts can call it
+            window.updateUndoRedoStatus = updateUndoRedoStatus;
+            // --- END OF CHANGE ---
+
+            async function handleUndoRedo(action) {
+                undoBtn.disabled = true; redoBtn.disabled = true;
+                const endpoint = action === 'undo' ? '/undo_change' : '/redo_change';
+                try {
+                    const response = await fetch(endpoint, { method: 'POST' });
+                    const result = await response.json();
+                    if (result.success) { window.location.reload(); }
+                    else { throw new Error('Action failed on server.'); }
+                } catch (error) {
+                    alert(`Error performing ${action}: ${error.message}`);
+                    updateUndoRedoStatus(); // Re-check status on failure
+                }
+            }
+
+            undoBtn.addEventListener('click', () => handleUndoRedo('undo'));
+            redoBtn.addEventListener('click', () => handleUndoRedo('redo'));
+            
+            // Call it once on initial page load
+            updateUndoRedoStatus();
+
+            // Data Health Check
+            const healthSidebar = document.getElementById('health-sidebar');
+            const iconMap = {
+                missing_values: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2.69l5.66 5.66a8 8 0 1 1-11.31 0z"></path><line x1="12" y1="12" x2="12" y2="18"></line><line x1="12" y1="8" x2="12.01" y2="8"></line></svg>',
+                duplicate_rows: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect><line x1="8" y1="12" x2="16" y2="12"></line></svg>',
+                whitespace: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z"></path><line x1="7" y1="7" x2="7.01" y2="7"></line></svg>',
+                zero_variance: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="15" y1="9" x2="9" y2="15"></line><line x1="9" y1="9" x2="15" y2="15"></line></svg>',
+                high_cardinality: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><polyline points="16 18 22 12 16 6"></polyline><polyline points="8 6 2 12 8 18"></polyline></svg>',
+                mixed_types: '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"></path><rect x="8" y="2" width="8" height="4" rx="1" ry="1"></rect></svg>',
+                skewed_distributions: '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3v18h18"></path><path d="M7 14a2 2 0 1 0-4 0"></path><path d="M11.5 11.5a2 2 0 1 0-4 0"></path><path d="M17.5 8.5a2 2 0 1 0-4 0"></path><path d="M21 6a2 2 0 1 0-4 0"></path></svg>',
+                global_outliers: '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path></svg>',
+                unwanted_chars: '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="8" x2="12" y2="12"></line><line x1="12" y1="16" x2="12.01" y2="16"></line></svg>',
+                negative_values: '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="12" x2="19" y2="12"></line></svg>'
+            };
+            const checkIcon = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>';
+            const crossIcon = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>';
+            async function updateHealthCheck() {
+                if (!"{{ session.get('filename') }}") { healthSidebar.style.display = 'none'; return; }
+                healthSidebar.style.display = 'flex';
+                try {
+                    const response = await fetch('/data_health_check');
+                    const data = await response.json();
+                    if (data.error) throw new Error(data.error);
+                    let sidebarHtml = '';
+                    for (const [key, check] of Object.entries(data.checks)) {
+                        const statusClass = check.passed ? 'passed' : 'failed';
+                        const statusIcon = check.passed ? checkIcon : crossIcon;
+                        sidebarHtml += `<div class="health-item"><div class="main-icon">${iconMap[key] || ''}</div><div class="status-icon ${statusClass}">${statusIcon}</div><div class="tooltip"><div class="tooltip-title">${check.name}</div><div class="tooltip-details">${check.details}</div></div></div>`;
+                    }
+                    healthSidebar.innerHTML = sidebarHtml;
+                } catch (error) {
+                    healthSidebar.innerHTML = `<p style="font-size:12px; color:#ffc107; text-align:center;">Health check failed.</p>`;
+                }
+            }
+            updateHealthCheck();
+        });
+    </script>
+</body>
+</html>

@@ -1,0 +1,258 @@
+{% extends "base.html" %}
+
+{% block title %}Data Cleaner Dashboard{% endblock %}
+
+{% block head_content %}
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chartjs-chart-treemap@2.3.0/dist/chartjs-chart-treemap.min.js"></script>
+    <style>
+        .dashboard-grid, .sidebar-top { scrollbar-width: thin; scrollbar-color: #313131 #171717; }
+    
+        /* --- Cleaner View Layout --- */
+        .cleaner-layout { display: flex; height: 100%; overflow: hidden; }
+        .cleaner-main { flex-grow: 1; display: flex; flex-direction: column; overflow: hidden; }
+        .dashboard-header { flex-shrink: 0; }
+        .dashboard-header h1 { margin: 0; color: #FFFFFF; }
+        .dashboard-header p { color: #a095c0; margin: 5px 0 0 0; }
+        .dashboard-grid { flex-grow: 1; overflow-y: auto; display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); }
+
+        /* --- Column Health Card Styles --- */
+        .health-card { background-color: #171717; border: 1px solid #2e2e2e; border-radius: 0px; padding: 15px; display: flex; flex-direction: column; gap: 12px; }
+        .card-header { display: flex; align-items: center; gap: 8px; border-bottom: 1px solid #4a3f6e; padding-bottom: 10px; }
+        .card-header .type-icon { color: #9D4EDD; }
+        .card-header .col-name { font-size: 1.1em; font-weight: 600; color: #FFFFFF; }
+        .metric-item { display: flex; justify-content: space-between; font-size: 14px; }
+        .metric-label { color: #a095c0; font-size: 0.9em; }
+        .metric-value { font-weight: 500; color: #E0D9F0; font-size: 0.9em; }
+        .metric-value.problem { color: #ffc107; font-weight: bold; }
+        .card-actions { margin-top: auto; display: flex; gap: 10px; }
+        .quick-fix-btn { flex: 1; padding: 8px; background-color: #1f1f1f; border: 1px solid #2e2e2e; font-weight: 500; font-size: 0.7em; color: #898989; border-radius: 5px; cursor: pointer; transition: background-color 0.2s; }
+        .quick-fix-btn:hover { background-color: #2C2541; }
+
+        /* --- Sidebar Layout & Components --- */
+        .cleaner-sidebar { width: 320px; flex-shrink: 0; background-color: #171717; border-right: 1px solid #2e2e2e; display: flex; flex-direction: column; height: 100vh; }
+        .sidebar-top { flex-grow: 1; overflow-y: auto; padding: 20px; min-height: 0; }
+        .sidebar-bottom { flex-shrink: 0; height: 35%; border-top: 1px solid #2e2e2e; background-color: #0F0F0F; display: flex; flex-direction: column; padding-bottom: 35px; }
+        .cleaner-sidebar h3 { margin-top: 0; color: #FFFFFF; border-bottom: 1px solid #2C2541; padding-bottom: 10px; }
+        .options-group { margin-bottom: 25px; }
+        .options-group label { display: block; color: #a095c0; font-weight: 500; margin-bottom: 8px; }
+        .options-group select, .options-group input { width: 100%; padding: 8px; border-radius: 5px; border: 1px solid #363636; background-color: #1f1f1f; color: #fafafa; box-sizing: border-box; }
+        .action-btn { width: 100%; padding: 10px; background-color: #242424; color: #E0D9F0; border: 1px solid #363636; border-radius: 8px; font-size: 0.8em; font-weight: 500; cursor: pointer; transition: background-color 0.3s; margin-top: 15px; }
+        .action-btn:hover { border-color: #424242; }
+        .action-btn:disabled { background-color: #0F0F0F; color:#4d4d4d; cursor: not-allowed; }
+        
+        /* Tab Navigation & Panes */
+        .tab-nav { display: flex; background-color: #171717; border-bottom: 1px solid #2C2541; flex-shrink: 0; padding: 0 10px; }
+        .tab-btn { flex: 1; padding: 10px; background-color: transparent; border: none; border-bottom: 2px solid transparent; color: #4d4d4d; font-size: 14px; font-weight: 500; cursor: pointer; transition: all 0.2s ease-in-out; }
+        .tab-btn:hover { background-color: #2C2541; }
+        .tab-btn.active { color: #898989; border-bottom-color: #FFF; }
+        .tab-content-area { flex-grow: 1; position: relative; min-height: 0; padding: 0 10px 10px 10px; }
+        .tab-pane { position: absolute; top: 0; left: 0; width: 100%; height: 100%; visibility: hidden; opacity: 0; transition: opacity 0.2s ease-in-out; padding-top: 15px; box-sizing: border-box; }
+        .tab-pane.active { visibility: visible; opacity: 1; }
+        .preview-chart-container { height: 100%; }
+        
+        /* Checklist for Encoding Panel */
+        .checklist-container { max-height: 150px; overflow-y: auto; border: 1px solid #4a3f6e; background-color: #2C2541; border-radius: 5px; padding: 10px; }
+        .checklist-item { display: flex; align-items: center; margin-bottom: 8px; }
+        .checklist-item input { width: 16px; height: 16px; margin-right: 10px; }
+        .checklist-item label { color: #E0D9F0; font-weight: normal; }
+        
+        /* Toggle Switch for Outlier Panel */
+        .toggle-switch { display: flex; align-items: center; background-color: #1f1f1f; border: 1px solid #2e2e2e; border-radius: 20px; padding: 4px; position: relative; }
+        .toggle-switch-label { flex: 1; text-align: center; font-size: 0.8em; font-weight: 500; color: #898989; z-index: 1; cursor: pointer; padding: 4px 8px; }
+        .toggle-switch-button { position: absolute; top: 4px; left: 4px; width: calc(50% - 4px); height: calc(100% - 8px); background-color: #2C2541; border-radius: 16px; transition: transform 0.3s ease; z-index: 0; }
+        .toggle-switch-label.active { color: white; }
+
+        .panel-description {
+            font-size: 12px; 
+            color: #a095c0; 
+            margin-top: -5px; 
+            margin-bottom: 10px;
+        }
+
+        .panel-divider {
+            border: none;
+            border-top: 1px solid #2C2541;
+            margin: 30px 0;
+        }
+    </style>
+{% endblock %}
+
+{% block content %}
+<div class="cleaner-layout">
+    <aside class="cleaner-sidebar">
+        <!-- TOP PART: Controls and settings -->
+        <div class="sidebar-top" id="cleaner-options-panel">
+            <h3>Cleaning Actions</h3>
+            <p style="color: #a095c0;">Select a "Quick Fix" from a column card to see its options here.</p>
+        </div>
+        
+        <!-- BOTTOM PART: Preview charts in tabs (for Outliers) -->
+        <div class="sidebar-bottom" id="outlier-preview-container" style="display: none;">
+            <div class="tab-nav">
+                <button class="tab-btn active" data-tab="iqr">IQR</button>
+                <button class="tab-btn" data-tab="zscore">Z-score</button>
+                <button class="tab-btn" data-tab="percentile">Percentile</button>
+            </div>
+            <div class="tab-content-area">
+                <div id="tab-iqr" class="tab-pane active"><div class="preview-chart-container" id="container-iqr"></div></div>
+                <div id="tab-zscore" class="tab-pane"><div class="preview-chart-container" id="container-zscore"></div></div>
+                <div id="tab-percentile" class="tab-pane"><div class="preview-chart-container" id="container-percentile"></div></div>
+            </div>
+        </div>
+    </aside>
+
+    <main class="cleaner-main">
+        <div class="dashboard-header">
+            <h1></h1>
+        </div>
+        <div class="dashboard-grid" id="dashboard-grid">
+            <p style="color: #a095c0;">Loading column health summaries...</p>
+        </div>
+    </main>
+</div>
+{% endblock %}
+
+{% block body_scripts %}
+<script type="module">
+    // --- Import all our panel modules ---
+    import { render as renderMissingValues } from "/js_modules/missing_values.js";
+    import { render as renderOutliers } from "/js_modules/outliers.js";
+    import { render as renderEncoding } from "/js_modules/encoding.js";
+    import { render as renderScaling } from "/js_modules/scaling.js";
+    import { render as renderDatetimeImpute } from "/js_modules/datetime_impute.js";
+    import { render as renderDatetimeFormat } from "/js_modules/datetime_format.js";
+    import { render as renderDatetimeShift } from "/js_modules/datetime_shift.js";
+    import { render as renderStandardizeText } from "/js_modules/standardize_text.js";
+
+    document.addEventListener('DOMContentLoaded', () => {
+        const dashboardGrid = document.getElementById('dashboard-grid');
+        const optionsPanel = document.getElementById('cleaner-options-panel');
+        const outlierPreviewContainer = document.getElementById('outlier-preview-container');
+        let columnsWithTypes = [];
+
+        // Map technique names to their render functions
+        const panelRenderers = {
+            'missing-values': renderMissingValues,
+            'outliers': renderOutliers,
+            'encoding': renderEncoding,
+            'scaling': renderScaling,
+            'datetime-impute': renderDatetimeImpute,
+            'datetime-format': renderDatetimeFormat,
+            'datetime-shift': renderDatetimeShift,
+            'standardize-text': renderStandardizeText,
+        };
+
+        // --- THE FIX IS HERE: Add the missing tab switching logic ---
+        const outlierTabNav = outlierPreviewContainer.querySelector('.tab-nav');
+        if (outlierTabNav) {
+            outlierTabNav.addEventListener('click', (event) => {
+                if (event.target.classList.contains('tab-btn')) {
+                    const tabName = event.target.dataset.tab;
+                    // Deactivate all buttons and panes within the outlier container
+                    outlierPreviewContainer.querySelectorAll('.tab-btn').forEach(btn => btn.classList.remove('active'));
+                    outlierPreviewContainer.querySelectorAll('.tab-pane').forEach(pane => pane.classList.remove('active'));
+                    // Activate the clicked ones
+                    event.target.classList.add('active');
+                    outlierPreviewContainer.querySelector(`#tab-${tabName}`).classList.add('active');
+                }
+            });
+        }
+        // --- END OF FIX ---
+
+        async function buildDashboard() {
+            try {
+                const response = await fetch('/column_health_summary');
+                const data = await response.json();
+                if (data.error) throw new Error(data.error);
+                
+                columnsWithTypes = data.summaries.map(s => ({name: s.name, type: s.type}));
+
+                if (data.summaries.length === 0) {
+                    dashboardGrid.innerHTML = '<p style="color: #a095c0;">No data found.</p>';
+                    return;
+                }
+
+                dashboardGrid.innerHTML = data.summaries.map(card => createCardHtml(card)).join('');
+                addCardEventListeners();
+
+            } catch (error) {
+                dashboardGrid.innerHTML = `<p style="color: #ffc107;">Error loading dashboard: ${error.message}</p>`;
+            }
+        }
+
+        function createCardHtml(card) {
+            let metricsHtml = `<div class="metric-item"><span class="metric-label">Missing</span><span class="metric-value ${card.missing_count > 0 ? 'problem' : ''}">${card.missing_count} (${card.missing_percent.toFixed(1)}%)</span></div>`;
+            let actionsHtml = '';
+            let icon = '❓';
+
+            const looksLikeDatetime = /date|time/i.test(card.name);
+
+            if (card.type === 'numeric') {
+                icon = '#';
+                metricsHtml += `<div class="metric-item"><span class="metric-label">Outliers</span><span class="metric-value ${card.outlier_count > 0 ? 'problem' : ''}">${card.outlier_count}</span></div>`;
+                metricsHtml += `<div class="metric-item"><span class="metric-label">Skewness</span><span class="metric-value ${Math.abs(card.skewness || 0) > 1 ? 'problem' : ''}">${card.skewness ? card.skewness.toFixed(2) : 'N/A'}</span></div>`;
+                actionsHtml = `<button class="quick-fix-btn" data-technique="missing-values" data-column="${card.name}">Impute</button><button class="quick-fix-btn" data-technique="outliers" data-column="${card.name}">Manage Outliers</button><button class="quick-fix-btn" data-technique="scaling" data-column="${card.name}">Scale</button>`;
+            
+            } else if (card.type === 'datetime' || (card.type !== 'numeric' && looksLikeDatetime)) {
+                icon = '🕒';
+                if (card.type !== 'datetime') {
+                     metricsHtml += `<div class="metric-item"><span class="metric-label">Format</span><span class="metric-value problem">Inconsistent</span></div>`;
+                } else {
+                    const tzProblem = card.timezone_count > 1;
+                    metricsHtml += `<div class="metric-item"><span class="metric-label">Timezones</span><span class="metric-value ${tzProblem ? 'problem' : ''}">${card.timezone_count === 0 ? 'Naive' : card.timezone_count}</span></div>`;
+                }
+                // --- NEW BUTTONS WITH UNIQUE data-technique ---
+                actionsHtml = `
+                    <button class="quick-fix-btn" data-technique="datetime-impute" data-column="${card.name}">Impute</button>
+                    <button class="quick-fix-btn" data-technique="datetime-format" data-column="${card.name}">Format</button>
+                    <button class="quick-fix-btn" data-technique="datetime-shift" data-column="${card.name}">Shift</button>
+                `;
+
+            } else if (card.type === 'categorical') {
+                icon = '🏷️';
+                metricsHtml += `<div class="metric-item"><span class="metric-label">Whitespace</span><span class="metric-value ${card.whitespace_count > 0 ? 'problem' : ''}">${card.whitespace_count}</span></div>`;
+                metricsHtml += `<div class="metric-item"><span class="metric-label">Cardinality</span><span class="metric-value">${card.cardinality}</span></div>`;
+                actionsHtml = `
+                    <button class="quick-fix-btn" data-technique="missing-values" data-column="${card.name}">Impute</button>
+                    <button class="quick-fix-btn" data-technique="standardize-text" data-column="${card.name}">Standardize</button>
+                    <button class="quick-fix-btn" data-technique="encoding" data-column="${card.name}">Encode</button>
+                `;
+            }
+            
+            return `
+                <div class="health-card">
+                    <div class="card-header"><span class="type-icon">${icon}</span><span class="col-name">${card.name}</span></div>
+                    ${metricsHtml}
+                    <div class="card-actions">${actionsHtml}</div>
+                </div>`;
+        }
+
+        
+        function addCardEventListeners() {
+            document.querySelectorAll('.quick-fix-btn').forEach(button => {
+                button.addEventListener('click', () => {
+                    const technique = button.dataset.technique;
+                    const columnName = button.dataset.column;
+                    
+                    const outlierPreviewContainer = document.getElementById('outlier-preview-container');
+                    outlierPreviewContainer.style.display = (technique === 'outliers') ? 'flex' : 'none';
+                    
+                    updateOptionsPanel(technique, columnName);
+                });
+            });
+        }
+
+        function updateOptionsPanel(technique, targetColumn = null) {
+            const renderer = panelRenderers[technique];
+            if (renderer) {
+                renderer(optionsPanel, columnsWithTypes, targetColumn, buildDashboard); 
+            } else {
+                optionsPanel.innerHTML = `<h3>${technique.replace('-', ' ')}</h3><p style="color: #a095c0;">Options for <strong>${targetColumn}</strong> will appear here.</p>`;
+            }
+        }
+
+        buildDashboard();
+    });
+</script>
+{% endblock %}

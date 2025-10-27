@@ -1,0 +1,595 @@
+{% extends "base.html" %}
+
+{% block title %}Pipeline Comparator{% endblock %}
+
+{% block head_content %}
+    <style>
+        .comparator-main { scrollbar-width: thin; scrollbar-color: #313131 #171717; }
+
+        /* --- THIS IS THE NEW CSS FOR UI LOCKING --- */
+        body.page-locked .side-nav,
+        body.page-locked .top-nav-user,
+        body.page-locked .comparator-sidebar {
+            opacity: 0.5;
+            pointer-events: none;
+            cursor: not-allowed !important;
+        }
+
+        /* --- Layout --- */
+        .comparator-layout { display: flex; height: 100%; overflow: hidden; }
+
+        /* --- Sidebar: Configuration --- */
+        .comparator-sidebar {
+            width: 320px;
+            flex-shrink: 0;
+            background-color: #171717;
+            border-right: 1px solid #2e2e2e;
+            display: flex;
+            flex-direction: column;
+            overflow-y: auto;
+        }
+        .sidebar-section {
+            background-color: #171717;
+            padding: 15px;
+            border-radius: 0px;
+            border-bottom: 1px solid #2e2e2e;
+        }
+        .sidebar-section.disabled {
+            opacity: 0.5;
+            pointer-events: none;
+        }
+        .sidebar-section h3 {
+            margin: 0 0 15px 0; color: #FFFFFF;
+            border-bottom: 1px solid #4a3f6e; padding-bottom: 10px;
+            font-size: 1.1em;
+        }
+        .sidebar-section label {
+            display: block; font-weight: 500; color: #a095c0;
+            margin-bottom: 8px; font-size: 14px;
+        }
+        .sidebar-section select {
+            width: 100%; padding: 10px; border-radius: 5px; border: 1px solid #363636;
+            background-color: #1f1f1f; color: #fafafa;
+        }
+        .sidebar-btn {
+            width: 100%; padding: 12px; border: 2px solid #363636; border-radius: 8px; font-weight: 500;
+            font-size: 0.7em; cursor: pointer; transition: background-color 0.2s;
+            background-color: #242424; color: #E0D9F0; margin-top: 10px;
+        }
+        .sidebar-btn:hover { border-color: #424242; }
+        #run-benchmark-btn { background-color: #1E192B; border: 2px solid #9D4EDD; color: #9D4EDD; }
+        #run-benchmark-btn:hover { background-color: #9D4EDD; color: white; }
+        .sidebar-btn:disabled { background-color: #4a3f6e; cursor: not-allowed; }
+
+        /* --- Main Content: Results --- */
+        .comparator-main {
+            flex-grow: 1;
+            padding: 20px 0px 20px 0px;
+            overflow-y: auto;
+            position: relative;
+        }
+        .main-placeholder { text-align: center; color: #a095c0; margin-top: 100px; }
+        .main-placeholder h2 { color: #E0D9F0; }
+
+        h2 { text-align: center; }
+
+        /* Loading Overlay */
+        .loading-overlay {
+            position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+            background: #171717e0; backdrop-filter: blur(5px);
+            display: none; justify-content: center; align-items: center; flex-direction: column;
+            z-index: 100;
+        }
+        .loader {
+            border: 8px solid #4a3f6e; border-top: 8px solid #9D4EDD;
+            border-radius: 50%; width: 60px; height: 60px;
+            animation: spin 1s linear infinite;
+        }
+        .loading-text { color: #E0D9F0; margin-top: 20px; font-size: 1.2em; }
+        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+
+        /* Results Dashboard */
+        .results-container { display: none; }
+        .results-summary-table, .data-table {
+            width: 100%; border-collapse: collapse; margin-bottom: 30px;
+            background-color: #121212; border: 1px solid #2e2e2e; border-radius: 0px; overflow: hidden;
+        }
+        .results-summary-table th, .results-summary-table td, .data-table th, .data-table td {
+            padding: 12px 15px; text-align: left; border-bottom: 1px solid #2e2e2e; font-size: 0.9em;;
+        }
+        .results-summary-table th, .data-table th { background-color: #1f1f1f; color: #FFFFFF; }
+        .results-summary-table td { font-size: 0.9em; }
+        
+        /* Winner Styles & Summary */
+        #benchmark-summary-text {
+            text-align: center;
+            color: #E0D9F0;
+            font-size: 1.4em;
+            margin-bottom: 25px;
+            line-height: 1.5;
+        }
+        #benchmark-summary-text strong { color: #28a745; }
+        .score-cell { font-weight: 500; font-size: 1em; }
+        .winning-score {
+            color: #28a745;
+            font-weight: bold;
+            font-size: 1em;
+        }
+        .winner-badge {
+            background-color: #28a745; color: white; padding: 3px 8px;
+            border-radius: 12px; font-size: 0.8em; margin-left: 10px; font-weight: bold;
+        }
+        
+        .benchmark-card { background-color: #1f1f1f; border: 1px solid #2e2e2e; border-radius: 0px; }
+        .benchmark-card h3 { margin-top: 0; color: #FFFFFF; padding: 0px 20px; text-align: center; }
+        .pycaret-results-wrapper { overflow-x: auto; }
+
+        /* Metric Toggle Styles */
+        .metric-toggle-container {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+            margin-bottom: 20px;
+            padding: 0px 20px;
+        }
+        .metric-toggle-btn {
+            padding: 8px 15px;
+            background-color: #1f1f1f;
+            border: 1px solid #2e2e2e;
+            font-size: 0.7em;
+            color: #E0D9F0;
+            border-radius: 8px;
+            cursor: pointer;
+            font-weight: 500;
+            transition: all 0.2s ease;
+        }
+        .metric-toggle-btn:hover { background-color: #2e2e2e; }
+        .metric-toggle-btn.active { background-color: #2e2e2e; border-color: #FFF; }
+
+
+        #progress-bar-container {
+            width: 80%;
+            max-width: 400px;
+            background-color: #1f1f1f;
+            border: 1px solid #2e2e2e;
+            border-radius: 5px;
+            margin-top: 20px;
+            display: none; /* Initially hidden */
+        }
+        #progress-bar {
+            width: 0%;
+            height: 24px;
+            background-color: #9D4EDD;
+            border-radius: 5px;
+            transition: width 0.4s ease;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            font-size: 12px;
+            font-weight: 500;
+        }
+    </style>
+{% endblock %}
+
+{% block content %}
+<div class="comparator-layout">
+    <aside class="comparator-sidebar">
+        <div class="sidebar-section" id="stage-1-section">
+            <h3>Stage 1: Run Pipelines</h3>
+            <div>
+                <label for="pipeline-a-select">Pipeline A</label>
+                <select id="pipeline-a-select"></select>
+            </div>
+            <div style="margin-top: 15px;">
+                <label for="pipeline-b-select">Pipeline B</label>
+                <select id="pipeline-b-select"></select>
+            </div>
+            <div style="margin-top: 15px; display: flex; align-items: center; gap: 10px;">
+                <input type="checkbox" id="use-raw-dataset-checkbox" checked>
+                <label for="use-raw-dataset-checkbox" style="margin-bottom: 0; font-size: 13px; color: #E0D9F0;">
+                    Use Raw (Original) Dataset
+                </label>
+            </div>
+            <button id="run-pipelines-btn" class="sidebar-btn">Run & Find Common Columns</button>
+        </div>
+        
+        <div class="sidebar-section disabled" id="stage-2-section">
+            <h3>Stage 2: Run Benchmark</h3>
+            <div style="display: flex; flex-direction: column; gap: 15px;">
+                <div>
+                    <label for="problem-type-select">Problem Type</label>
+                    <select id="problem-type-select">
+                        <option value="regression">Regression</option>
+                        <option value="classification">Classification</option>
+                    </select>
+                </div>
+                <div>
+                    <label for="target-variable-select">Target Variable (to predict)</label>
+                    <select id="target-variable-select"></select>
+                </div>
+            </div>
+            <button id="run-benchmark-btn" class="sidebar-btn">Run Comparison Benchmark</button>
+        </div>
+    </aside>
+
+    <main class="comparator-main">
+        <div class="loading-overlay" id="loading-overlay">
+            <div class="loader"></div>
+            <h3 class="loading-text" id="loading-text">Processing...</h3>
+            <div id="progress-bar-container">
+                <div id="progress-bar">0%</div>
+            </div>
+        </div>
+
+        <div class="main-placeholder" id="main-placeholder">
+            <h2>Compare Pipeline Performance</h2>
+            <p>Select two pipelines and run Stage 1 to see how they transform your data and find common columns for benchmarking.</p>
+        </div>
+
+        <div class="results-container" id="results-container">
+            <h2>Comparison Results</h2>
+            <table class="results-summary-table" id="summary-table"></table>
+            
+            <div class="benchmark-card" id="merged-benchmark-card">
+                <h2 id="benchmark-summary-text"></h2>
+                <h3>Model Benchmark Leaderboard</h3>
+                <div class="metric-toggle-container" id="metric-toggle-container"></div>
+                <div class="pycaret-results-wrapper" id="merged-benchmark-table-wrapper"></div>
+            </div>
+        </div>
+    </main>
+</div>
+{% endblock %}
+
+{% block body_scripts %}
+<script>
+document.addEventListener('DOMContentLoaded', () => {
+    // --- DOM Elements ---
+    const appLayout = document.querySelector('.app-layout');
+    const pageBody = document.querySelector('body');
+    const pipelineASelect = document.getElementById('pipeline-a-select');
+    const pipelineBSelect = document.getElementById('pipeline-b-select');
+    const targetVarSelect = document.getElementById('target-variable-select');
+    const problemTypeSelect = document.getElementById('problem-type-select');
+    const runPipelinesBtn = document.getElementById('run-pipelines-btn');
+    const runBenchmarkBtn = document.getElementById('run-benchmark-btn');
+    const loadingOverlay = document.getElementById('loading-overlay');
+    const loadingText = document.getElementById('loading-text');
+    const mainPlaceholder = document.getElementById('main-placeholder');
+    const resultsContainer = document.getElementById('results-container');
+    const summaryTable = document.getElementById('summary-table');
+    const benchmarkSummaryText = document.getElementById('benchmark-summary-text');
+    const mergedBenchmarkWrapper = document.getElementById('merged-benchmark-table-wrapper');
+    const metricToggleContainer = document.getElementById('metric-toggle-container');
+    const stage2Section = document.getElementById('stage-2-section');
+    const progressBarContainer = document.getElementById('progress-bar-container');
+    const progressBar = document.getElementById('progress-bar');
+    
+    // --- State ---
+    let fullPipelineSpecs = {};
+    let commonSchema = [];
+    let fullBenchmarkData = [];
+    let stage1Results = {};
+
+    // --- Initialization ---
+    async function initialize() {
+        try {
+            const response = await fetch('/get_comparator_initial_data', { credentials: 'same-origin' });
+            const data = await response.json();
+            if (data.error) throw new Error(data.error);
+            
+            const pipelineOptions = data.pipelines.map(p => `<option value="${p}">${p}</option>`).join('');
+            pipelineASelect.innerHTML = pipelineOptions;
+            pipelineBSelect.innerHTML = pipelineOptions;
+            if (data.pipelines.length > 1) {
+                pipelineBSelect.selectedIndex = 1;
+            }
+        } catch (error) {
+            alert(`Failed to initialize page: ${error.message}`);
+        }
+    }
+
+    // --- UI Logic ---
+    function updateTargetOptions() {
+        const problemType = problemTypeSelect.value;
+        const MAX_CLASSES = 50; // Heuristic for a valid classification target
+        let relevantCols = [];
+
+        if (problemType === 'regression') {
+            relevantCols = commonSchema.filter(c => c.type === 'numeric');
+        } else {
+            relevantCols = commonSchema.filter(c => 
+                c.type === 'categorical' && c.cardinality <= MAX_CLASSES
+            );
+        }
+        
+        targetVarSelect.innerHTML = relevantCols.map(c => `<option value="${c.name}">${c.name}</option>`).join('');
+        if (relevantCols.length === 0) {
+            targetVarSelect.innerHTML = '<option value="">No suitable columns found</option>';
+        }
+    }
+
+    problemTypeSelect.addEventListener('change', updateTargetOptions);
+
+    // --- Data Fetching & Execution ---
+    async function getPipelineSpec(name) {
+        if (fullPipelineSpecs[name]) return fullPipelineSpecs[name];
+        const response = await fetch(`/pipelines/load/${encodeURIComponent(name)}`, { credentials: 'same-origin' });
+        const data = await response.json();
+        if (data.error) throw new Error(`Could not load pipeline: ${name}`);
+        fullPipelineSpecs[name] = data;
+        return data;
+    }
+
+    function pollJobProgress(jobId, onComplete, onError) {
+        const interval = setInterval(async () => {
+            try {
+                // Use the new, more detailed progress endpoint
+                const response = await fetch(`/job_progress/${jobId}`, { credentials: 'same-origin' });
+                if (!response.ok) throw new Error('Network response was not ok.');
+                const data = await response.json();
+
+                // Update the progress bar and status text
+                loadingText.textContent = data.status_message || 'Processing...';
+                progressBar.style.width = `${data.progress}%`;
+                progressBar.textContent = `${Math.round(data.progress)}%`;
+
+                if (data.status === 'finished' || data.status === 'failed') {
+                    clearInterval(interval);
+                    if (data.status === 'finished') {
+                        onComplete(data.result);
+                    } else { // Failed
+                        onError(data.error);
+                    }
+                }
+            } catch (error) {
+                clearInterval(interval);
+                onError('Error polling job status: ' + error.message);
+            }
+        }, 2000); // Poll every 2 seconds
+    }
+
+    // --- STAGE 1: RUN PIPELINES ---
+    runPipelinesBtn.addEventListener('click', async () => {
+        const pipelineAName = pipelineASelect.value;
+        const pipelineBName = pipelineBSelect.value;
+        const useRawDataset = document.getElementById('use-raw-dataset-checkbox').checked;
+
+        if (pipelineAName === pipelineBName) {
+            alert("Please select two different pipelines to compare.");
+            return;
+        }
+
+        // --- THIS IS THE CHANGE: Lock the UI ---
+        pageBody.classList.add('page-locked');
+
+        mainPlaceholder.style.display = 'none';
+        resultsContainer.style.display = 'none';
+        loadingOverlay.style.display = 'flex';
+        loadingText.textContent = 'Submitting job...';
+        progressBarContainer.style.display = 'block';
+        progressBar.style.width = '0%';
+        progressBar.textContent = '0%';
+        runPipelinesBtn.disabled = true;
+        stage2Section.classList.add('disabled');
+
+        try {
+            const pipeline_a_spec = await getPipelineSpec(pipelineAName);
+            const pipeline_b_spec = await getPipelineSpec(pipelineBName);
+
+            const response = await fetch('/run_pipelines_for_comparison', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ pipeline_a_spec, pipeline_b_spec, use_raw_dataset: useRawDataset }),
+                credentials: 'same-origin'
+            });
+
+            if (response.status !== 202) {
+                const errorResult = await response.json();
+                throw new Error(errorResult.error || 'Failed to start job on the server.');
+            }
+
+            const { job_id } = await response.json();
+
+            pollJobProgress(
+                job_id,
+                (result) => { // onComplete
+                    pageBody.classList.remove('page-locked'); // --- THIS IS THE CHANGE: Unlock the UI ---
+                    loadingOverlay.style.display = 'none';
+                    runPipelinesBtn.disabled = false;
+                    stage1Results = result;
+                    commonSchema = result.common_schema;
+                    renderPipelineSummary(result, pipelineAName, pipelineBName);
+                    updateTargetOptions();
+                    stage2Section.classList.remove('disabled');
+                },
+                (error) => { // onError
+                    pageBody.classList.remove('page-locked'); // --- THIS IS THE CHANGE: Unlock the UI ---
+                    alert(`An error occurred during pipeline execution: ${error}`);
+                    mainPlaceholder.style.display = 'block';
+                    loadingOverlay.style.display = 'none';
+                    runPipelinesBtn.disabled = false;
+                }
+            );
+
+        } catch (error) {
+            pageBody.classList.remove('page-locked'); // --- THIS IS THE CHANGE: Unlock the UI ---
+            alert(`Failed to start Stage 1: ${error.message}`);
+            loadingOverlay.style.display = 'none';
+            runPipelinesBtn.disabled = false;
+            mainPlaceholder.style.display = 'block';
+        }
+    });
+
+    // --- STAGE 2: RUN BENCHMARK ---
+    runBenchmarkBtn.addEventListener('click', async () => {
+        const pipelineAName = pipelineASelect.value;
+        const pipelineBName = pipelineBSelect.value;
+        const payload = {
+            target: targetVarSelect.value,
+            problem_type: problemTypeSelect.value,
+            pipeline_a_spec: fullPipelineSpecs[pipelineAName],
+            pipeline_b_spec: fullPipelineSpecs[pipelineBName],
+            execution_time_a: stage1Results.result_a.execution_time,
+            execution_time_b: stage1Results.result_b.execution_time
+        };
+
+        if (!payload.target) {
+            alert("No suitable target variable found or selected for this problem type.");
+            return;
+        }
+
+        // --- THIS IS THE CHANGE: Lock the UI ---
+        pageBody.classList.add('page-locked');
+
+        loadingOverlay.style.display = 'flex';
+        loadingText.textContent = 'Submitting benchmark job...';
+        progressBarContainer.style.display = 'block';
+        progressBar.style.width = '0%';
+        progressBar.textContent = '0%';
+        runBenchmarkBtn.disabled = true;
+
+        try {
+            const response = await fetch('/run_benchmark_for_comparison', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload),
+                credentials: 'same-origin'
+            });
+
+            if (response.status !== 202) {
+                const errorResult = await response.json();
+                throw new Error(errorResult.error || 'Failed to start benchmark job.');
+            }
+            
+            const { job_id } = await response.json();
+
+            pollJobProgress(
+                job_id,
+                (result) => { // onComplete
+                    pageBody.classList.remove('page-locked'); // --- THIS IS THE CHANGE: Unlock the UI ---
+                    loadingOverlay.style.display = 'none';
+                    runBenchmarkBtn.disabled = false;
+                    fullBenchmarkData = result.merged_benchmark;
+                    renderBenchmarkSection(result);
+                },
+                (error) => { // onError
+                    appLayout.classList.remove('page-locked'); // --- THIS IS THE CHANGE: Unlock the UI ---
+                    alert(`An error occurred during benchmarking: ${error}`);
+                    loadingOverlay.style.display = 'none';
+                    runBenchmarkBtn.disabled = false;
+                }
+            );
+
+        } catch (error) {
+            pageBody.classList.remove('page-locked'); // --- THIS IS THE CHANGE: Unlock the UI ---
+            alert(`Failed to start Stage 2: ${error.message}`);
+            loadingOverlay.style.display = 'none';
+            runBenchmarkBtn.disabled = false;
+        }
+    });
+
+    // --- Rendering Logic ---
+    function renderPipelineSummary(result, nameA, nameB) {
+        const { result_a, result_b } = result;
+        const timeWinner = result_a.execution_time < result_b.execution_time ? 'A' : 'B';
+        const peakMemWinner = result_a.peak_memory_mb < result_b.peak_memory_mb ? 'A' : 'B';
+        const avgMemWinner = result_a.avg_memory_mb < result_b.avg_memory_mb ? 'A' : 'B';
+
+        summaryTable.innerHTML = `
+            <thead><tr><th>Metric</th><th>${nameA}</th><th>${nameB}</th></tr></thead>
+            <tbody>
+                <tr><td>Execution Time</td><td>${result_a.execution_time}s ${timeWinner === 'A' ? '<span class="winner-badge">FASTER</span>' : ''}</td><td>${result_b.execution_time}s ${timeWinner === 'B' ? '<span class="winner-badge">FASTER</span>' : ''}</td></tr>
+                <tr><td>Peak Memory Usage</td><td>${result_a.peak_memory_mb} MB ${peakMemWinner === 'A' ? '<span class="winner-badge">LOWER</span>' : ''}</td><td>${result_b.peak_memory_mb} MB ${peakMemWinner === 'B' ? '<span class="winner-badge">LOWER</span>' : ''}</td></tr>
+                <tr><td>Final Row Count</td><td>${result_a.final_shape.rows.toLocaleString()}</td><td>${result_b.final_shape.rows.toLocaleString()}</td></tr>
+                <tr><td>Final Column Count</td><td>${result_a.final_shape.columns}</td><td>${result_b.final_shape.columns}</td></tr>
+            </tbody>
+        `;
+        mergedBenchmarkWrapper.innerHTML = `<p style="color:#a095c0; text-align:center;">Run Stage 2 to see benchmark results.</p>`;
+        metricToggleContainer.innerHTML = '';
+        benchmarkSummaryText.innerHTML = '';
+        resultsContainer.style.display = 'block';
+    }
+    
+    function renderBenchmarkSection(result) {
+        benchmarkSummaryText.innerHTML = result.summary_text || '';
+        const defaultMetric = problemTypeSelect.value === 'regression' ? 'R2' : 'Accuracy';
+        setupMetricToggles();
+        renderMergedBenchmarkTable(defaultMetric);
+    }
+
+    function setupMetricToggles() {
+        const problemType = problemTypeSelect.value;
+        const metrics = problemType === 'regression'
+            ? ['R2', 'MAE', 'MSE', 'RMSE', 'RMSLE', 'MAPE', 'TT (Sec)']
+            : ['Accuracy', 'AUC', 'Recall', 'Prec.', 'F1', 'Kappa', 'MCC', 'TT (Sec)'];
+        
+        metricToggleContainer.innerHTML = metrics.map(metric => 
+            `<button class="metric-toggle-btn" data-metric="${metric}">${metric}</button>`
+        ).join('');
+        
+        metricToggleContainer.querySelectorAll('.metric-toggle-btn').forEach(btn => {
+            btn.addEventListener('click', () => {
+                metricToggleContainer.querySelector('.active')?.classList.remove('active');
+                btn.classList.add('active');
+                renderMergedBenchmarkTable(btn.dataset.metric);
+            });
+        });
+
+        const defaultMetric = problemType === 'regression' ? 'R2' : 'Accuracy';
+        metricToggleContainer.querySelector(`[data-metric="${defaultMetric}"]`).classList.add('active');
+    }
+
+    function renderMergedBenchmarkTable(activeMetric) {
+        const nameA = pipelineASelect.value;
+        const nameB = pipelineBSelect.value;
+        const problemType = problemTypeSelect.value;
+        const lowerIsBetter = problemType === 'regression'
+            ? ['MAE', 'MAPE', 'MSE', 'RMSE', 'RMSLE', 'TT (Sec)']
+            : ['TT (Sec)'];
+
+        let tableHtml = `<table class="data-table"><thead><tr><th>Model</th><th>${nameA}</th><th>${nameB}</th></tr></thead><tbody>`;
+        
+        fullBenchmarkData.sort((a, b) => {
+            const scoreA = parseFloat(a[activeMetric + '_a']);
+            const scoreB = parseFloat(b[activeMetric + '_a']);
+            if (isNaN(scoreA)) return 1;
+            if (isNaN(scoreB)) return -1;
+            if (lowerIsBetter.includes(activeMetric)) return scoreA - scoreB;
+            return scoreB - scoreA;
+        });
+
+        fullBenchmarkData.forEach(item => {
+            const scoreA = parseFloat(item[activeMetric + '_a']);
+            const scoreB = parseFloat(item[activeMetric + '_b']);
+            
+            let winner = 'none';
+            if (!isNaN(scoreA) && !isNaN(scoreB)) {
+                if (lowerIsBetter.includes(activeMetric)) {
+                    if (scoreA < scoreB) winner = 'a'; else if (scoreB < scoreA) winner = 'b';
+                } else {
+                    if (scoreA > scoreB) winner = 'a'; else if (scoreB > scoreA) winner = 'b';
+                }
+            }
+
+            const classA = winner === 'a' ? 'winning-score' : '';
+            const classB = winner === 'b' ? 'winning-score' : '';
+
+            tableHtml += `
+                <tr>
+                    <td>${item.Model}</td>
+                    <td><span class="score-cell ${classA}">${!isNaN(scoreA) ? scoreA.toFixed(4) : 'N/A'}</span></td>
+                    <td><span class="score-cell ${classB}">${!isNaN(scoreB) ? scoreB.toFixed(4) : 'N/A'}</span></td>
+                </tr>
+            `;
+        });
+
+        tableHtml += `</tbody></table>`;
+        mergedBenchmarkWrapper.innerHTML = tableHtml;
+    }
+
+    initialize();
+});
+</script>
+{% endblock %}

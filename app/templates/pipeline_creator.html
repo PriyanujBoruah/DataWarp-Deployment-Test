@@ -1,0 +1,655 @@
+{% extends "base.html" %}
+
+{% block title %}Pipeline Creator{% endblock %}
+
+{% block head_content %}
+    <script src="https://cdn.jsdelivr.net/npm/sortablejs@latest/Sortable.min.js"></script>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/themes/prism-tomorrow.min.css" rel="stylesheet" />
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-core.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/plugins/autoloader/prism-autoloader.min.js"></script>
+
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Google+Sans+Code:ital,wght@0,300..800;1,300..800&display=swap" rel="stylesheet">
+    <style>
+        .pipeline-steps-column, #code-container { scrollbar-width: thin; scrollbar-color: #313131 #171717; }
+
+        /* --- Layout --- */
+        .pipeline-layout { display: flex; height: 100%; overflow: hidden; }
+
+        /* --- Sidebar: Pipeline Management --- */
+        .pipeline-sidebar {
+            width: 280px;
+            flex-shrink: 0;
+            background-color: #171717;
+            border-right: 1px solid #2e2e2e;
+            display: flex;
+            flex-direction: column;
+        }
+        .sidebar-section {
+            background-color: #171717;
+            padding: 15px;
+            display: flex; /* For flex layout inside sections */
+            flex-direction: column;
+            border-bottom: 1px solid #2e2e2e;
+        }
+        .sidebar-section h3 {
+            margin: 0 0 15px 0;
+            color: #FFFFFF;
+            border-bottom: 1px solid #4a3f6e;
+            padding-bottom: 10px;
+            font-size: 1.1em;
+        }
+        .sidebar-btn {
+            width: 100%;
+            padding: 10px;
+            border: none;
+            border-radius: 8px;
+            font-size: 0.7em;
+            font-weight: 500;
+            cursor: pointer;
+            transition: background-color 0.2s;
+            margin-bottom: 10px;
+        }
+        .run-btn { background-color: #1E192B; border: 2px solid #9D4EDD; color: #9D4EDD; }
+        .run-btn:hover { background-color: #9D4EDD; color: white; }
+        .save-btn, .save-as-btn, .reset-btn { background-color: #242424; border: 2px solid #363636; color: #E0D9F0; }
+        .save-btn:hover, .save-as-btn:hover, .reset-btn:hover { border-color: #424242; }
+
+        /* Current Pipeline Section */
+        #current-pipeline-name {
+            font-size: 1.2em;
+            font-weight: bold;
+            color: #FFFFFF;
+            margin-bottom: 15px;
+            padding-bottom: 5px;
+            border-bottom: 2px solid #4a3f6e;
+        }
+        .manage-buttons { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+        .manage-buttons .save-btn { grid-column: 1 / -1; } /* Save button spans full width */
+
+        /* Saved Pipelines List */
+        #saved-pipelines-list {
+            flex-grow: 1; /* Allows the list to take available space */
+            overflow-y: auto;
+            margin-top: 10px;
+            max-height: 40vh; /* Or adjust as needed */
+        }
+        .saved-pipeline-item {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 10px;
+            border-radius: 5px;
+            margin-bottom: 5px;
+            background-color: #1f1f1f;
+            border: 1px solid #2e2e2e;
+        }
+        .saved-pipeline-item:hover { background-color: #2e2e2e; }
+        .pipeline-list-name { color: #E0D9F0; font-weight: 500; }
+        .pipeline-item-actions { display: flex; gap: 8px; }
+        .pipeline-action-btn { background: none; border: none; cursor: pointer; color: #a095c0; padding: 0; }
+        .pipeline-action-btn:hover { color: white; }
+        .pipeline-action-btn svg { width: 18px; height: 18px; }
+
+        /* --- Main View --- */
+        .pipeline-main-view {
+            flex-grow: 1; display: flex; height: 100%; min-width: 0;
+        }
+        .pipeline-steps-column {
+            width: 45%; flex-shrink: 0; padding: 20px; overflow-y: auto; background-color: #171717; border-right: 1px solid #2e2e2e;
+        }
+        .generated-code-column {
+            width: 55%; padding: 20px; overflow-y: auto; display: flex; flex-direction: column;
+        }
+        .pipeline-steps-column h2, .generated-code-column h2 { margin-top: 0; color: #FFFFFF; }
+        
+        /* --- Step Card --- */
+        .pipeline-step-card { background-color: #171717; border: 2px solid #363636; border-radius: 8px; margin-bottom: 15px; overflow: hidden; }
+        .card-header { display: flex; align-items: center; gap: 10px; padding: 10px 15px; background-color: #0F0F0F; cursor: grab; }
+        .card-header:active { cursor: grabbing; }
+        .step-number { font-weight: bold; color: #9D4EDD; }
+        .step-name { flex-grow: 1; font-weight: 500; color: #E0D9F0; }
+        .delete-step-btn { background: none; border: none; color: #a095c0; cursor: pointer; transition: color 0.2s; }
+        .delete-step-btn:hover { color: #dc3545; }
+        .card-content { padding: 20px; display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 20px; }
+        .card-content.single-column { grid-template-columns: 1fr; }
+        .add-step-btn { background: none; border: 2px dashed #4a3f6e; color: #a095c0; padding: 15px 30px; border-radius: 8px; cursor: pointer; transition: all 0.2s; font-size: 1em; font-weight: 500; }
+        .add-step-btn:hover { border-color: #9D4EDD; color: #9D4EDD; }
+
+        /* --- Generic & Specific Control Styles --- */
+        .control-group { margin: 0; }
+        .control-group label { font-size: 14px; font-weight: 500; color: #a095c0; display: block; margin-bottom: 8px; }
+        .control-group select, .control-group input:not([type='checkbox']), .control-group textarea { width: 100%; padding: 8px; border-radius: 5px; border: 1px solid #363636; background-color: #1f1f1f; color: #fafafa; font-family: inherit; box-sizing: border-box; }       
+        .checklist-container { max-height: 200px; overflow-y: auto; border: 1px solid #363636; background-color: #1f1f1f; border-radius: 5px; padding: 10px; }
+        .checklist-item { display: flex; align-items: center; margin-bottom: 8px; }
+        .checklist-item input[type='checkbox'] { margin-right: 10px; width: 16px; height: 16px; flex-shrink: 0; }
+        .checklist-item label { color: #E0D9F0; font-weight: normal; flex-grow: 1; }     
+        .threshold-value-display {
+            text-align: center;
+            font-weight: bold;
+            color: white;
+            margin-top: 5px;
+            font-size: 14px;
+        }   
+                
+        /* --- Code Viewer --- */
+        #code-container { flex-grow: 1; background-color: #1E192B; border-radius: 8px; padding: 0; overflow-y: auto; min-height: 0; }        
+        #code-container pre { margin: 0; }
+        #code-container code { display: block; height: 100%; font-family: "Google Sans Code", monospace; font-size: 14px; white-space: pre-wrap; word-wrap: break-word; }       
+
+        /* --- Modal --- */
+        .modal-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.6); z-index: 1000; display: none; justify-content: center; align-items: center; }
+        .modal-content { background: #2C2541; padding: 20px; border-radius: 12px; width: 90%; max-width: 800px; overflow-y: auto; max-height: 90vh; }
+        .modal-content h3 { margin-top: 0; color: white; }
+        .modal-categories { display: flex; flex-direction: column; gap: 15px; }
+        .modal-category h4 { color: #a095c0; margin: 0 0 10px 0; border-bottom: 1px solid #4a3f6e; padding-bottom: 5px; }
+        .modal-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 10px; }
+        .modal-item { text-align: center; padding: 12px; background-color: #1E192B; border: 1px solid #4a3f6e; border-radius: 8px; cursor: pointer; color: #E0D9F0; transition: background-color 0.2s; }
+        .modal-item:hover { background-color: #9D4EDD; }
+    </style>
+{% endblock %}
+
+{% block content %}
+<div class="pipeline-layout">
+    <aside class="pipeline-sidebar">
+        <div class="sidebar-section">
+            <button id="run-pipeline-btn" class="sidebar-btn run-btn">▶ Generate & Run</button>
+        </div>
+
+        <div class="sidebar-section">
+            <div id="current-pipeline-name">Unsaved Pipeline</div>
+            <div class="manage-buttons">
+                <button id="save-pipeline-btn" class="sidebar-btn save-btn">Save</button>
+                <button id="save-as-pipeline-btn" class="sidebar-btn save-as-btn">Save As...</button>
+                <button id="reset-pipeline-btn" class="sidebar-btn reset-btn">Reset</button>
+            </div>
+        </div>
+
+        <div class="sidebar-section" style="flex-grow: 1; min-height: 0;">
+            <h3>Saved Pipelines</h3>
+            <div id="saved-pipelines-list">
+                <p style="font-size: 14px; color: #a095c0; text-align: center;">No saved pipelines found.</p>
+            </div>
+        </div>
+    </aside>
+
+    <main class="pipeline-main-view">
+        <div class="pipeline-steps-column">
+            <h2>Pipeline Steps</h2>
+            <div id="pipeline-steps-container">
+                <!-- JS will render pipeline step cards here -->
+            </div>
+            <button class="add-step-btn" id="add-step-main-btn" style="width: 100%; margin-top: 15px;">+ Add Step</button>
+        </div>
+        <div class="generated-code-column">
+            <h2>Generated Python Code</h2>
+            <div id="code-container">
+                <pre><code id="code-output-area" class="language-python"></code></pre>
+            </div>
+        </div>
+    </main>
+</div>
+
+<!-- Add Step Modal (Unchanged from previous version) -->
+<div class="modal-overlay" id="add-step-modal">
+    <div class="modal-content">
+        <h3>Choose a Step to Add</h3>
+        <div class="modal-categories">
+            <div class="modal-category">
+                <h4>Cleaning & Preparation</h4>
+                <div class="modal-grid">
+                    <div class="modal-item" data-step-type="remove_duplicates">Remove Duplicates</div>
+                    <div class="modal-item" data-step-type="standardize_column_names">Standardize Column Names</div>
+                    <div class="modal-item" data-step-type="clean_text_data">Clean Text Data</div>
+                    <div class="modal-item" data-step-type="handle_missing">Handle Missing Values</div>
+                </div>
+            </div>
+            <div class="modal-category">
+                <h4>Data Transformation</h4>
+                <div class="modal-grid">
+                    <div class="modal-item" data-step-type="handle_outliers">Handle Outliers</div>
+                    <div class="modal-item" data-step-type="transform_skewed_data">Transform Skewed Data</div>
+                </div>
+            </div>
+            <div class="modal-category">
+                <h4>Preprocessing / ML</h4>
+                <div class="modal-grid">
+                    <div class="modal-item" data-step-type="feature_scaling">Feature Scaling</div>
+                    <div class="modal-item" data-step-type="categorical_encoding">Categorical Encoding</div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block body_scripts %}
+<script>
+document.addEventListener('DOMContentLoaded', () => {
+    // --- DOM & STATE ---
+    const stepsContainer = document.getElementById('pipeline-steps-container');
+    const codeOutputArea = document.getElementById('code-output-area');
+    const runPipelineBtn = document.getElementById('run-pipeline-btn');
+    const addStepMainBtn = document.getElementById('add-step-main-btn');
+    const modalOverlay = document.getElementById('add-step-modal');
+    
+    // Revamped Controls
+    const currentPipelineNameDiv = document.getElementById('current-pipeline-name');
+    const saveBtn = document.getElementById('save-pipeline-btn');
+    const saveAsBtn = document.getElementById('save-as-pipeline-btn');
+    const resetBtn = document.getElementById('reset-pipeline-btn');
+    const savedPipelinesList = document.getElementById('saved-pipelines-list');
+
+    let pipelineSteps = {{ pipeline_spec_json | safe }};
+    const defaultPipelineSpec = JSON.parse(JSON.stringify({{ pipeline_spec_json | safe }})); // Deep copy for resetting
+    const schema = {{ schema_json | safe }};
+    let nextStepId = pipelineSteps.length > 0 ? Math.max(...pipelineSteps.map(s => s.id)) + 1 : 1;
+    let currentPipelineName = "Unsaved Pipeline";
+
+    const STEP_DEFINITIONS = {
+        "remove_duplicates": { name: "Remove Duplicates" }, "standardize_column_names": { name: "Standardize Column Names" },
+        "clean_text_data": { name: "Clean Text Data" },
+        "handle_missing": { name: "Handle Missing Values" },
+        "handle_outliers": { name: "Handle Outliers" }, "transform_skewed_data": { name: "Transform Skewed Data" },
+        "feature_scaling": { name: "Feature Scaling" }, "categorical_encoding": { name: "Categorical Encoding" }
+    };
+
+    // --- RENDER FUNCTIONS (renderPipelineSteps and renderStepContent are unchanged) ---
+    function renderPipelineSteps() {
+        stepsContainer.innerHTML = '';
+        pipelineSteps.forEach((step, index) => {
+            const card = document.createElement('div');
+            card.className = 'pipeline-step-card'; card.dataset.stepId = step.id;
+            card.innerHTML = `<div class="card-header"><span class="step-number">#${index + 1}</span><span class="step-name">${step.name}</span><button class="delete-step-btn">✖</button></div><div class="card-content"></div>`;
+            stepsContainer.appendChild(card);
+            renderStepContent(card.querySelector('.card-content'), step);
+        });
+        addDynamicEventListeners();
+    }
+
+    function renderStepContent(parentElement, step) {
+        // ... (This entire function is unchanged from the previous version) ...
+        let configHtml = '';
+        const single = 'single-column';
+        switch (step.type) {
+            case 'remove_duplicates': parentElement.classList.add(single); configHtml = `<div class="control-group"><div class="checklist-container"><div class="checklist-item"><input type="checkbox" id="dup-rows-${step.id}" data-config-key="rows" ${step.config.rows ? 'checked' : ''}><label for="dup-rows-${step.id}">Remove Duplicate Rows</label></div></div></div>`; break;
+            case 'standardize_column_names': parentElement.classList.add(single); const name_methods = ['snake_case', 'camelCase', 'TitleCase', 'lowercase', 'uppercase']; configHtml = `<div class="control-group"><label>Case Style</label><select data-config-key="method">${name_methods.map(m => `<option value="${m}" ${step.config.method === m ? 'selected' : ''}>${m}</option>`).join('')}</select></div>`; break;
+            case 'auto_convert_types': parentElement.classList.add(single); configHtml = `<p style="color:#a095c0; font-size: 14px;">This step automatically attempts to convert text columns to numeric or date types where appropriate. No configuration is needed.</p>`; break;
+            case 'clean_text_data': parentElement.classList.add(single); configHtml = `<div class="control-group"><label>Cleaning Options (for all text columns)</label><div class="checklist-container"><div class="checklist-item"><input type="checkbox" id="clean-ws-${step.id}" data-config-key="trim_whitespace" ${step.config.trim_whitespace ? 'checked' : ''}><label for="clean-ws-${step.id}">Trim Whitespace</label></div><div class="checklist-item"><input type="checkbox" id="clean-punc-${step.id}" data-config-key="remove_punctuation" ${step.config.remove_punctuation ? 'checked' : ''}><label for="clean-punc-${step.id}">Remove Punctuation</label></div><div class="checklist-item"><input type="checkbox" id="clean-num-${step.id}" data-config-key="remove_numbers" ${step.config.remove_numbers ? 'checked' : ''}><label for="clean-num-${step.id}">Remove Numbers</label></div><div class="checklist-item"><input type="checkbox" id="clean-spec-${step.id}" data-config-key="remove_special_chars" ${step.config.remove_special_chars ? 'checked' : ''}><label for="clean-spec-${step.id}">Remove Special Characters</label></div></div></div>`; break;
+            case 'handle_missing':
+                const num_methods = ['median', 'mean', 'mode', 'ffill', 'bfill', 'specific_value', 'drop_rows'];
+                const cat_methods = ['mode', 'ffill', 'bfill', 'specific_value', 'drop_rows'];
+                const dt_methods = ['interpolate', 'median', 'mean', 'mode', 'ffill', 'bfill', 'specific_value', 'drop_rows'];
+
+                configHtml = `
+                    <div class="control-group">
+                        <label>Numeric Columns</label>
+                        <select data-config-key="numeric_method">${num_methods.map(m => `<option value="${m}" ${step.config.numeric_method === m ? 'selected' : ''}>${m.replace(/_/g, ' ')}</option>`).join('')}</select>
+                    </div>
+                    <div class="control-group">
+                        <label>Categorical Columns</label>
+                        <select data-config-key="categorical_method">${cat_methods.map(m => `<option value="${m}" ${step.config.categorical_method === m ? 'selected' : ''}>${m.replace(/_/g, ' ')}</option>`).join('')}</select>
+                    </div>
+                    <div class="control-group">
+                        <label>Datetime Columns</label>
+                        <select data-config-key="datetime_method">${dt_methods.map(m => `<option value="${m}" ${step.config.datetime_method === m ? 'selected' : ''}>${m.replace(/_/g, ' ')}</option>`).join('')}</select>
+                    </div>
+                    
+                    <div class="control-group specific-value-input" id="numeric-specific-value-container-${step.id}" style="display: none;">
+                        <label>Numeric Specific Value</label>
+                        <input type="number" data-config-key="numeric_specific_value" value="${step.config.numeric_specific_value || 0}">
+                    </div>
+                    <div class="control-group specific-value-input" id="categorical-specific-value-container-${step.id}" style="display: none;">
+                        <label>Categorical Specific Value</label>
+                        <input type="text" data-config-key="categorical_specific_value" value="${step.config.categorical_specific_value || ''}">
+                    </div>
+                    <div class="control-group specific-value-input" id="datetime-specific-value-container-${step.id}" style="display: none;">
+                        <label>Datetime Specific Value</label>
+                        <input type="text" data-config-key="datetime_specific_value" placeholder="e.g., 2025-10-26 12:00:00" value="${step.config.datetime_specific_value || ''}">
+                    </div>
+
+                    <div class="control-group" style="grid-column: 1 / -1;">
+                        <label>Drop Columns if Missing > X%</label>
+                        <input type="number" data-config-key="drop_threshold" value="${step.config.drop_threshold}" min="0" max="100">
+                    </div>
+                `;
+                break;
+            case 'create_datetime_features': configHtml = `<div class="control-group" style="grid-column: 1 / -1;"><label>Features to Create (from all date columns)</label><div class="checklist-container"><div class="checklist-item"><input type="checkbox" id="dt-year-${step.id}" data-config-key="year" ${step.config.year ? 'checked' : ''}><label for="dt-year-${step.id}">Year</label></div><div class="checklist-item"><input type="checkbox" id="dt-month-${step.id}" data-config-key="month" ${step.config.month ? 'checked' : ''}><label for="dt-month-${step.id}">Month</label></div><div class="checklist-item"><input type="checkbox" id="dt-doy-${step.id}" data-config-key="day_of_year" ${step.config.day_of_year ? 'checked' : ''}><label for="dt-doy-${step.id}">Day of Year</label></div><div class="checklist-item"><input type="checkbox" id="dt-woy-${step.id}" data-config-key="week_of_year" ${step.config.week_of_year ? 'checked' : ''}><label for="dt-woy-${step.id}">Week of Year</label></div><div class="checklist-item"><input type="checkbox" id="dt-dow-${step.id}" data-config-key="day_of_week" ${step.config.day_of_week ? 'checked' : ''}><label for="dt-dow-${step.id}">Day of Week</label></div><div class="checklist-item"><input type="checkbox" id="dt-wkn-${step.id}" data-config-key="is_weekend" ${step.config.is_weekend ? 'checked' : ''}><label for="dt-wkn-${step.id}">Is Weekend?</label></div></div></div><div class="control-group"><label>Day of Week Format</label><select data-config-key="day_of_week_format"><option value="name" ${step.config.day_of_week_format === 'name' ? 'selected' : ''}>Name (e.g., Tuesday)</option><option value="number" ${step.config.day_of_week_format === 'number' ? 'selected' : ''}>Number (0-6)</option></select></div><div class="control-group"><label>Original Columns</label><div class="checklist-container"><div class="checklist-item"><input type="checkbox" id="dt-drop-${step.id}" data-config-key="drop_original" ${step.config.drop_original ? 'checked' : ''}><label for="dt-drop-${step.id}">Drop Original Date Columns</label></div></div></div>`; break;
+            case 'handle_outliers':
+                const outlier_methods = ['iqr', 'zscore', 'percentile'];
+                const method = step.config.method || 'iqr';
+                const threshold = step.config.threshold || 1.5;
+                
+                let sliderAttrs = '';
+                let labelText = '';
+                if (method === 'iqr') {
+                    labelText = 'Multiplier (1.5 is standard)';
+                    sliderAttrs = `min="1" max="3" step="0.1" value="${threshold}"`;
+                } else if (method === 'zscore') {
+                    labelText = 'Z-score Threshold (3.0 is standard)';
+                    sliderAttrs = `min="2" max="4" step="0.1" value="${threshold}"`;
+                } else if (method === 'percentile') {
+                    labelText = 'Threshold (e.g., 0.01 for 1%/99%)';
+                    sliderAttrs = `min="0.001" max="0.1" step="0.001" value="${threshold}"`;
+                }
+
+                configHtml = `
+                    <div class="control-group">
+                        <label>Method (for all numeric columns)</label>
+                        <select data-config-key="method">
+                            ${outlier_methods.map(m => `<option value="${m}" ${method === m ? 'selected' : ''}>${m.toUpperCase()}</option>`).join('')}
+                        </select>
+                    </div>
+                    <div class="control-group">
+                        <label>${labelText}</label>
+                        <input type="range" data-config-key="threshold" ${sliderAttrs}>
+                        <div class="threshold-value-display">${parseFloat(threshold).toFixed(method === 'percentile' ? 3 : 1)}</div>
+                    </div>`;
+                break;            
+            case 'transform_skewed_data': const right_methods = ['log', 'sqrt', 'cbrt', 'reciprocal', 'box-cox', 'yeo-johnson', 'arcsinh']; const left_methods = ['square', 'cube', 'tesseractic', 'reflection']; configHtml = `<div class="control-group"><label>Right-Skewed Data (> 0.5)</label><select data-config-key="right_skew_method">${right_methods.map(m => `<option value="${m}" ${step.config.right_skew_method === m ? 'selected' : ''}>${m.replace('_', ' ')}</option>`).join('')}</select></div><div class="control-group"><label>Left-Skewed Data (< -0.5)</label><select data-config-key="left_skew_method">${left_methods.map(m => `<option value="${m}" ${step.config.left_skew_method === m ? 'selected' : ''}>${m}</option>`).join('')}</select></div>`; break;
+            case 'feature_scaling': parentElement.classList.add(single); const scale_methods = ['standard', 'minmax', 'robust']; configHtml = `<div class="control-group"><label>Method (for all numeric columns)</label><select data-config-key="method">${scale_methods.map(m => `<option value="${m}" ${step.config.method === m ? 'selected' : ''}>${m.charAt(0).toUpperCase() + m.slice(1)}Scaler</option>`).join('')}</select></div>`; break;
+            case 'categorical_encoding': parentElement.classList.add(single); const encode_methods = ['onehot', 'hashing']; configHtml = `<div class="control-group"><label>Method (for all categorical columns)</label><select data-config-key="method">${encode_methods.map(m => `<option value="${m}" ${step.config.method === m ? 'selected' : ''}>${m === 'onehot' ? 'One-Hot' : 'Hashing'}</option>`).join('')}</select></div>`; break;
+            default: configHtml = `<p style="color:#a095c0;">(UI not implemented)</p>`;
+        }
+        parentElement.innerHTML = configHtml;
+    }
+
+    function addStep(stepType) {
+        let defaultConfig = {};
+        switch (stepType) {
+            case 'remove_duplicates': defaultConfig = { rows: true }; break;
+            case 'standardize_column_names': defaultConfig = { method: 'snake_case' }; break;
+            case 'clean_text_data': defaultConfig = { trim_whitespace: true, remove_punctuation: false, remove_numbers: false, remove_special_chars: false }; break;
+            case 'handle_missing': defaultConfig = { drop_threshold: 70, numeric_method: 'median', categorical_method: 'mode' }; break;
+            case 'handle_outliers': defaultConfig = { method: 'iqr', threshold: 1.5 }; break;
+            case 'transform_skewed_data': defaultConfig = { right_skew_method: 'log', left_skew_method: 'square' }; break;
+            case 'feature_scaling': defaultConfig = { method: 'standard' }; break;
+            case 'categorical_encoding': defaultConfig = { method: 'onehot' }; break;
+        }
+        const newStep = { id: nextStepId++, type: stepType, name: STEP_DEFINITIONS[stepType].name, config: defaultConfig };
+        pipelineSteps.push(newStep);
+        renderPipelineSteps();
+        generateAndDisplayCode();
+    }
+
+    // --- CORE LOGIC & INITIALIZATION ---
+    async function initialize() {
+        currentPipelineNameDiv.textContent = currentPipelineName;
+        await updateSavedPipelinesList();
+        renderPipelineSteps();
+        await generateAndDisplayCode();
+        
+        new Sortable(stepsContainer, {
+            animation: 150, handle: '.card-header',
+            onEnd: (evt) => {
+                const stepId = parseInt(evt.item.dataset.stepId);
+                const oldIndex = pipelineSteps.findIndex(s => s.id === stepId);
+                const newCardIndex = Array.from(stepsContainer.querySelectorAll('.pipeline-step-card')).indexOf(evt.item);
+                const [movedItem] = pipelineSteps.splice(oldIndex, 1);
+                pipelineSteps.splice(newCardIndex, 0, movedItem);
+                renderPipelineSteps();
+                generateAndDisplayCode();
+            }
+        });
+    }
+
+    async function generateAndDisplayCode() {
+        codeOutputArea.textContent = 'Generating code...';
+        try {
+            const response = await fetch('/generate_pipeline_code', { 
+                method: 'POST', 
+                headers: { 'Content-Type': 'application/json' }, 
+                body: JSON.stringify({ 
+                    steps: pipelineSteps,
+                    name: currentPipelineName
+                }),
+                credentials: 'same-origin'
+            });
+            const result = await response.json();
+            if (result.error) throw new Error(result.error);
+            codeOutputArea.textContent = result.code;
+            Prism.highlightElement(codeOutputArea);
+            return result.code;
+        } catch (error) {
+            codeOutputArea.textContent = `# Error:\n${error.message}`; 
+            Prism.highlightElement(codeOutputArea);
+            return null;
+        }
+    }
+
+    async function updateSavedPipelinesList() {
+        // ... (This function is unchanged from the previous version) ...
+        try {
+            const response = await fetch('/pipelines/list', {credentials: 'same-origin'});
+            const data = await response.json();
+            if (data.error) throw new Error(data.error);
+            if (data.pipelines.length === 0) {
+                savedPipelinesList.innerHTML = '<p style="font-size: 14px; color: #a095c0; text-align: center;">No saved pipelines found.</p>';
+            } else {
+                savedPipelinesList.innerHTML = data.pipelines.map(name => `
+                    <div class="saved-pipeline-item">
+                        <span class="pipeline-list-name">${name}</span>
+                        <div class="pipeline-item-actions">
+                            <button class="pipeline-action-btn load-btn" data-name="${name}" title="Load Pipeline">
+                                <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
+                            </button>
+                            <button class="pipeline-action-btn delete-btn" data-name="${name}" title="Delete Pipeline">
+                               <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>
+                            </button>
+                        </div>
+                    </div>
+                `).join('');
+            }
+        } catch (error) {
+            console.error('Error loading pipelines list:', error);
+            savedPipelinesList.innerHTML = '<p style="color: #ffc107;">Error loading pipelines.</p>';
+        }
+    }
+
+    // --- EVENT LISTENERS ---
+    function addDynamicEventListeners() {
+        stepsContainer.querySelectorAll('.delete-step-btn').forEach(btn => btn.addEventListener('click', (e) => {
+            const card = e.target.closest('.pipeline-step-card');
+            const stepId = parseInt(card.dataset.stepId);
+            pipelineSteps = pipelineSteps.filter(step => step.id !== stepId);
+            renderPipelineSteps();
+            generateAndDisplayCode();
+        }));
+
+        stepsContainer.querySelectorAll('.pipeline-step-card').forEach(card => {
+            const stepId = parseInt(card.dataset.stepId);
+            const step = pipelineSteps.find(s => s.id === stepId);
+            if (!step) return;
+
+            if (step.type === 'handle_missing') {
+                const setupSpecificValueToggle = (dataType) => {
+                    const select = card.querySelector(`[data-config-key="${dataType}_method"]`);
+                    const inputContainer = card.querySelector(`#${dataType}-specific-value-container-${step.id}`);
+                    if (!select || !inputContainer) return;
+
+                    const toggle = () => {
+                        inputContainer.style.display = select.value === 'specific_value' ? 'block' : 'none';
+                    };
+                    
+                    select.addEventListener('change', toggle);
+                    toggle(); // Call once on initial render
+                };
+                setupSpecificValueToggle('numeric');
+                setupSpecificValueToggle('categorical');
+                setupSpecificValueToggle('datetime');
+            }
+
+            // Generic listener for most simple inputs/selects
+            card.querySelectorAll('input:not([type="range"]), select').forEach(elem => {
+                elem.addEventListener('change', () => {
+                    const key = elem.dataset.configKey;
+                    if (!key) return;
+                    
+                    if (elem.type === 'checkbox') {
+                        step.config[key] = elem.checked;
+                    } else {
+                        step.config[key] = elem.value;
+                    }
+                    
+                    // If the outlier method changes, we must re-render the card
+                    // to update the slider's attributes (min, max, step).
+                    if (step.type === 'handle_outliers' && key === 'method') {
+                        renderPipelineSteps(); 
+                    } else {
+                        generateAndDisplayCode();
+                    }
+                });
+            });
+
+            // Specific listener for the outlier slider for live updates
+            const outlierSlider = card.querySelector('input[type="range"][data-config-key="threshold"]');
+            if (outlierSlider) {
+                const valueDisplay = card.querySelector('.threshold-value-display');
+                outlierSlider.addEventListener('input', () => {
+                    const method = step.config.method || 'iqr';
+                    const displayValue = parseFloat(outlierSlider.value).toFixed(method === 'percentile' ? 3 : 1);
+                    valueDisplay.textContent = displayValue;
+                    step.config.threshold = parseFloat(outlierSlider.value);
+                    generateAndDisplayCode();
+                });
+            }
+        });
+    }
+
+    addStepMainBtn.addEventListener('click', () => modalOverlay.style.display = 'flex');
+    modalOverlay.addEventListener('click', (e) => {
+        if (e.target.classList.contains('modal-overlay')) modalOverlay.style.display = 'none';
+        const modalItem = e.target.closest('.modal-item');
+        if (modalItem) { addStep(modalItem.dataset.stepType); modalOverlay.style.display = 'none'; }
+    });
+   
+    // --- THIS IS THE CORRECTED AND RESTORED EVENT LISTENER ---
+    runPipelineBtn.addEventListener('click', async () => {
+        runPipelineBtn.disabled = true; 
+        runPipelineBtn.textContent = 'Submitting...';
+        
+        const codeToRun = await generateAndDisplayCode(); 
+        if (!codeToRun) { 
+            alert("Code generation failed. Cannot execute."); 
+            runPipelineBtn.disabled = false; 
+            runPipelineBtn.textContent = '▶ Generate & Run'; 
+            return; 
+        }
+        
+        try {
+            const response = await fetch('/execute_pipeline_code', { 
+                method: 'POST', 
+                headers: { 'Content-Type': 'application/json' }, 
+                body: JSON.stringify({ code: codeToRun }),
+                // --- THIS IS THE FIX: Added credentials to the fetch call ---
+                credentials: 'same-origin' 
+            });
+
+            if (response.status !== 202) {
+                const errorResult = await response.json();
+                throw new Error(errorResult.error || 'Failed to start job.');
+            }
+
+            const result = await response.json();
+            
+            // --- THIS IS THE FIX: Dispatch the global event instead of local polling ---
+            const jobStartedEvent = new CustomEvent('job-started', {
+                detail: {
+                    jobId: result.job_id,
+                    jobName: `Pipeline: ${currentPipelineName}`
+                }
+            });
+            document.dispatchEvent(jobStartedEvent);
+            // --- END OF FIX ---
+
+            runPipelineBtn.textContent = 'Job is running...';
+
+        } catch (error) {
+            alert(`Execution Failed:\n${error.message}`);
+            runPipelineBtn.disabled = false; 
+            runPipelineBtn.textContent = '▶ Generate & Run';
+        }
+    });
+
+    // --- New Event Listeners for Revamped Controls ---
+    saveBtn.addEventListener('click', async () => {
+        if (currentPipelineName === "Unsaved Pipeline") {
+            saveAsBtn.click();
+            return;
+        }
+        try {
+            const res = await fetch('/pipelines/save', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name: currentPipelineName, steps: pipelineSteps }), credentials: 'same-origin' });
+            const result = await res.json();
+            if (result.error) throw new Error(result.error);
+            alert(`Pipeline '${currentPipelineName}' saved successfully.`);
+            await updateSavedPipelinesList();
+        } catch (error) { alert(`Error saving: ${error.message}`); }
+    });
+
+    saveAsBtn.addEventListener('click', async () => {
+        const newName = prompt("Enter a new name for this pipeline:", currentPipelineName.replace('Unsaved', 'My'));
+        if (!newName || !newName.trim()) return;
+        try {
+            const res = await fetch('/pipelines/save', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name: newName, steps: pipelineSteps }), credentials: 'same-origin' });
+            const result = await res.json();
+            if (result.error) throw new Error(result.error);
+            alert(`Pipeline saved as '${newName}'.`);
+            currentPipelineName = newName;
+            currentPipelineNameDiv.textContent = currentPipelineName;
+            await updateSavedPipelinesList();
+        } catch (error) { alert(`Error saving: ${error.message}`); }
+    });
+
+    resetBtn.addEventListener('click', () => {
+        if (confirm("Are you sure you want to reset the current pipeline to the default steps? Any unsaved changes will be lost.")) {
+            pipelineSteps = JSON.parse(JSON.stringify(defaultPipelineSpec));
+            currentPipelineName = "Unsaved Pipeline";
+            currentPipelineNameDiv.textContent = currentPipelineName;
+            nextStepId = pipelineSteps.length > 0 ? Math.max(...pipelineSteps.map(s => s.id)) + 1 : 1;
+            renderPipelineSteps();
+            generateAndDisplayCode();
+        }
+    });
+
+    savedPipelinesList.addEventListener('click', async (e) => {
+        const loadButton = e.target.closest('.load-btn');
+        const deleteButton = e.target.closest('.delete-btn');
+
+        if (loadButton) {
+            const nameToLoad = loadButton.dataset.name;
+            try {
+                const response = await fetch(`/pipelines/load/${encodeURIComponent(nameToLoad)}`, {credentials: 'same-origin'});
+                const data = await response.json();
+                if (data.error) throw new Error(data.error);
+                pipelineSteps = data.steps;
+                currentPipelineName = data.name;
+                currentPipelineNameDiv.textContent = currentPipelineName;
+                nextStepId = pipelineSteps.length > 0 ? Math.max(...pipelineSteps.map(s => s.id)) + 1 : 1;
+                renderPipelineSteps();
+                generateAndDisplayCode();
+                alert(`Pipeline '${currentPipelineName}' loaded.`);
+            } catch (error) { alert(`Error loading: ${error.message}`); }
+        }
+
+        if (deleteButton) {
+            const nameToDelete = deleteButton.dataset.name;
+            if (!confirm(`Permanently delete the '${nameToDelete}' pipeline?`)) return;
+            try {
+                const response = await fetch(`/pipelines/delete/${encodeURIComponent(nameToDelete)}`, { method: 'DELETE', credentials: 'same-origin'});
+                const result = await response.json();
+                if (result.error) throw new Error(result.error);
+                alert(result.message);
+                if (currentPipelineName === nameToDelete) {
+                    resetBtn.click();
+                }
+                await updateSavedPipelinesList();
+            } catch (error) { alert(`Error deleting: ${error.message}`); }
+        }
+    });
+
+    // --- INITIALIZE THE VIEW ---
+    initialize();
+});
+</script>
+{% endblock %}

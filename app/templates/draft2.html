@@ -1,0 +1,228 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Upload Dataset</title>
+    <style>
+        /* --- General Body & Font Styles (from base.html) --- */
+        html, body {
+            height: 100%;
+            margin: 0;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            background-color: #1E1B2B;
+            color: #E0D9F0;
+            display: flex;
+            flex-direction: column; /* Allow header and main content to stack */
+        }
+
+        /* --- Top Navigation Bar Styles (copied from base.html) --- */
+        .top-nav-bar {
+            height: 50px;
+            width: 100%;
+            background-color: #161220;
+            border-bottom: 1px solid #2C2541;
+            display: flex;
+            align-items: center;
+            padding: 0 20px;
+            box-sizing: border-box;
+            flex-shrink: 0;
+        }
+        .top-nav-content {
+            width: 100%;
+            display: grid;
+            grid-template-columns: 1fr auto 1fr;
+            align-items: center;
+        }
+        .top-nav-brand {
+            justify-self: start;
+            font-size: 1.2em;
+            font-weight: bold;
+            color: #FFFFFF;
+        }
+        .top-nav-center {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            color: #a095c0;
+            font-size: 14px;
+            justify-self: center;
+        }
+        .top-nav-center svg {
+            width: 16px; height: 16px; stroke: #a095c0; stroke-width: 2;
+        }
+        .top-nav-center span {
+            font-weight: 500;
+            color: #E0D9F0;
+        }
+        .top-nav-user {
+            justify-self: end;
+            position: relative;
+        }
+        .user-menu-btn {
+            background-color: #2C2541;
+            border: 1px solid #4a3f6e;
+            border-radius: 50%;
+            width: 36px; height: 36px;
+            display: flex; align-items: center; justify-content: center;
+            cursor: pointer;
+            transition: background-color 0.2s;
+        }
+        .user-menu-btn:hover { background-color: #4a3f6e; }
+        .user-menu-btn svg { width: 20px; height: 20px; stroke: #a095c0; }
+        .user-menu-dropdown {
+            display: none;
+            position: absolute;
+            top: calc(100% + 10px);
+            right: 0;
+            width: 280px;
+            background-color: #1E192B;
+            border: 1px solid #4a3f6e;
+            border-radius: 8px;
+            box-shadow: 0 8px 16px rgba(0,0,0,0.3);
+            z-index: 1001;
+            padding: 15px;
+        }
+        .user-menu-dropdown.show { display: block; }
+        .user-info-header { border-bottom: 1px solid #4a3f6e; padding-bottom: 10px; margin-bottom: 10px; }
+        .user-info-header .email { font-weight: 500; color: #FFFFFF; word-break: break-all; }
+        .user-info-item { display: flex; justify-content: space-between; font-size: 14px; margin-bottom: 8px; }
+        .info-label { color: #a095c0; }
+        .info-value { font-weight: 500; color: #E0D9F0; }
+        .user-menu-dropdown .logout-button {
+            width: 100%; text-align: center; margin-top: 15px;
+            background-color: #dc3545; border-color: #dc3545;
+            color: #E0D9F0; padding: 6px 12px; border-radius: 5px; text-decoration: none;
+            font-size: 12px; font-weight: 500; border: 1px solid #dc3545;
+        }
+        .admin-dashboard-button {
+            display: block; width: 100%; text-align: center; margin-top: 15px;
+            background-color: #007bff; border: 1px solid #007bff; color: white;
+            padding: 8px 12px; border-radius: 5px; text-decoration: none;
+            font-size: 14px; font-weight: 500; transition: all 0.2s ease;
+            box-sizing: border-box;
+        }
+        .admin-dashboard-button:hover { background-color: #0069d9; }
+
+        /* --- Styles for the upload form itself --- */
+        .upload-page-wrapper {
+            flex-grow: 1; /* This makes it fill the remaining vertical space */
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+        .upload-container {
+            background-color: #2C2541;
+            padding: 40px;
+            border-radius: 12px;
+            box-shadow: 0 10px 25px rgba(0,0,0,0.3);
+            text-align: center;
+            max-width: 500px;
+            width: 100%;
+        }
+        h1 { color: #FFFFFF; margin-bottom: 20px; }
+        input[type="file"] {
+            display: block; width: 100%; box-sizing: border-box;
+            border: 2px dashed #9D4EDD;
+            padding: 40px 20px;
+            border-radius: 8px;
+            background-color: #1E192B;
+            color: #E0D9F0;
+            cursor: pointer;
+            margin-bottom: 20px;
+        }
+        input[type="submit"] {
+            background-color: #9D4EDD; color: white;
+            padding: 12px 25px; border: none; border-radius: 8px;
+            font-size: 16px; cursor: pointer;
+            transition: background-color 0.3s;
+        }
+        input[type="submit"]:hover { background-color: #8b3dcf; }
+        .flash-message { 
+            padding: 15px; border-radius: 5px; margin-bottom: 20px; 
+            background-color: #492328; color: #ffc107; border: 1px solid #dc3545;
+        }
+    </style>
+</head>
+<body>
+
+    <!-- Manually included Top Navigation Bar HTML -->
+    <header class="top-nav-bar">
+        <div class="top-nav-content">
+            <div class="top-nav-brand">Data Platform</div>
+            <div class="top-nav-center">
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M13 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"></path><polyline points="13 2 13 9 20 9"></polyline></svg>
+                <span>{{ session.get('filename', 'No file loaded') }}</span>
+            </div>
+            <div class="top-nav-user">
+                {% if session['user'] %}
+                    <button class="user-menu-btn" id="user-menu-btn" title="User Menu">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path><circle cx="12" cy="7" r="4"></circle></svg>
+                    </button>
+                    <div class="user-menu-dropdown" id="user-menu-dropdown">
+                        <div class="user-info-header">
+                            <div class="email">{{ session['user']['email'] }}</div>
+                        </div>
+                        <div class="user-info-item">
+                            <span class="info-label">Organization:</span>
+                            <span class="info-value">{{ session.get('org_name', 'N/A') }}</span>
+                        </div>
+                        <div class="user-info-item">
+                            <span class="info-label">Role:</span>
+                            <span class="info-value">{{ session.get('role', 'user') | capitalize }}</span>
+                        </div>
+                        {% if session.get('role') == 'admin' %}
+                        <a href="{{ url_for('admin_dashboard') }}" class="admin-dashboard-button">Admin Dashboard</a>
+                        {% endif %}
+                        <hr style="border-color: #4a3f6e; margin-top: 15px;">
+                        <a href="{{ url_for('logout') }}" class="logout-button">Logout</a>
+                    </div>
+                {% endif %}
+            </div>
+        </div>
+    </header>
+
+    <!-- Main content area for the upload form -->
+    <div class="upload-page-wrapper">
+        <div class="upload-container">
+            <h1>Data Cleaning Automation</h1>
+            <p>Upload a file to begin the analysis and cleaning process.</p>
+            
+            {% with messages = get_flashed_messages(with_categories=true) %}
+                {% if messages %}
+                    {% for category, message in messages %}
+                        <div class="flash-message {{ category }}">{{ message }}</div>
+                    {% endfor %}
+                {% endif %}
+            {% endwith %}
+
+            <form method="post" enctype="multipart/form-data">
+                <input type="file" name="file" required>
+                <input type="submit" value="Upload & Analyze">
+            </form>
+        </div>
+    </div>
+
+    <!-- Manually included JavaScript for the user menu dropdown -->
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            const userMenuBtn = document.getElementById('user-menu-btn');
+            const userMenuDropdown = document.getElementById('user-menu-dropdown');
+
+            if (userMenuBtn && userMenuDropdown) {
+                userMenuBtn.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    userMenuDropdown.classList.toggle('show');
+                });
+
+                // Close dropdown if clicked outside
+                window.addEventListener('click', (e) => {
+                    if (!userMenuBtn.contains(e.target) && !userMenuDropdown.contains(e.target)) {
+                        userMenuDropdown.classList.remove('show');
+                    }
+                });
+            }
+        });
+    </script>
+</body>
+</html>

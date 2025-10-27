@@ -1,0 +1,33 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Login</title>
+    <style>
+        /* Using the same style as your upload page for consistency */
+        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; background-color: #0f0f0f; color: #E0D9F0; display: flex; justify-content: center; align-items: center; height: 100vh; margin: 0; }
+        .login-container { background-color: #171717; padding: 40px; border: 1px solid #2E2E2E; border-radius: 12px; box-shadow: 0 10px 25px rgba(0,0,0,0.3); text-align: center; width: 350px; }
+        h1 { color: #FFFFFF; }
+        form { display: flex; flex-direction: column; gap: 15px; }
+        input { padding: 12px; border-radius: 8px; border: 1px solid #363636; background-color: #1f1f1f; color: #fafafa; font-size: 16px; }
+        button { background-color: #1E192B; color: #9D4EDD; padding: 12px; border: 1px solid #9D4EDD; border-radius: 8px; font-size: 16px; cursor: pointer; transition: background-color 0.3s; }
+        button:hover { background-color: #9D4EDD; color: #fff; }
+        .flash-error { background-color: #492328; color: #ffc107; padding: 10px; border-radius: 5px; margin-bottom: 15px; }
+    </style>
+</head>
+<body>
+    <div class="login-container">
+        <h1>Platform Login</h1>
+        {% with messages = get_flashed_messages() %}
+            {% if messages %}
+                <div class="flash-error">{{ messages[0] }}</div>
+            {% endif %}
+        {% endwith %}
+        <form method="post">
+            <input type="email" name="email" placeholder="Email" required>
+            <input type="password" name="password" placeholder="Password" required>
+            <button type="submit">Login</button>
+        </form>
+    </div>
+</body>
+</html>

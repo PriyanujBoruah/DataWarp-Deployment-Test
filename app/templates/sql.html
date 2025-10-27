@@ -1,0 +1,322 @@
+{% extends "base.html" %}
+
+{% block title %}SQL Lab{% endblock %}
+
+{% block head_content %}
+    <script src="https://unpkg.com/ag-grid-community/dist/ag-grid-community.min.js"></script>
+    <style>
+        /* AG Grid Dark Theme */
+        .ag-theme-alpine-dark {
+            --ag-font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            --ag-background-color: #121212;
+            --ag-foreground-color: #E0D9F0;
+            --ag-border-color: #2e2e2e;
+            --ag-header-background-color: #1f1f1f;
+            --ag-header-foreground-color: #FFFFFF;
+            --ag-row-background-color: #171717;
+            --ag-row-hover-color: #2C2541;
+            --ag-odd-row-background-color: #171717;
+            --ag-selected-row-background-color: rgba(157, 78, 221, 0.25);
+        }
+
+        .schema-sidebar, .ag-body-vertical-scroll-viewport, .ag-body-horizontal-scroll-viewport { scrollbar-width: thin; scrollbar-color: #313131 #171717; }
+        
+        /* Layout Styles */
+        .sql-layout { display: flex; height: 100%; overflow: hidden; }
+        .schema-sidebar { width: 280px; flex-shrink: 0; background-color: #171717; border-right: 1px solid #2e2e2e; padding: 20px; overflow-y: auto; }
+        .schema-sidebar h3 { margin-top: 0; color: #FFFFFF; border-bottom: 1px solid #2C2541; padding-bottom: 10px; }
+        .schema-item { margin-bottom: 15px; }
+        .table-name { font-weight: bold; color: #E0D9F0; }
+        .column-list { padding-left: 15px; font-size: 14px; }
+        .column-list-item { display: grid; grid-template-columns: auto 1fr; align-items: center; gap-left: 8px; padding: 4px 0; color: #E0D9F0; }
+        .column-list-item .type-icon { color: #9D4EDD; grid-row: 1 / 3; margin-right: 8px; }
+        .column-name { font-weight: 500; }
+        .column-properties { font-size: 12px; color: #a095c0; display: flex; gap: 8px; grid-column: 2; }
+        .prop-item.unique { color: #ffc107; font-weight: 500; }
+        .prop-item.nullable { color: #dc3545; }
+        .prop-item.not-nullable { color: #28a745; }
+
+        /* Main Content */
+        .sql-main { flex-grow: 1; display: flex; flex-direction: column; overflow: hidden; }
+        .sql-editor-pane { height: 40%; flex-shrink: 0; display: flex; flex-direction: column; padding-top: 20px; }
+        
+        /* AI Generator */
+        .ai-generator { display: flex; margin-bottom: 10px; align-items: center; }
+        #ai-prompt-input { flex-grow: 1; padding: 8px; border-radius: 0px; border: none; border-top: 1px solid #2e2e2e; border-bottom: 1px solid #2e2e2e; background-color: #171717; color: #E0D9F0; font-size: 14px; }
+        #ai-generate-btn { background-color: #1f1f1f; color: #898989; border: 1px solid #2e2e2e; padding: 10px 15px; border-radius: 0px; font-size: 0.7em; font-weight: 500; cursor: pointer; transition: all 0.2s; }
+        #ai-generate-btn:hover { background-color: #2C2541; color: white; }
+        #ai-generate-btn:disabled { background-color: #0F0F0F; color: #4d4d4d; border: none; cursor: not-allowed;}
+        
+        /* Editor */
+        .editor-header { display: flex; justify-content: space-between; align-items: center; margin-top: 10px; margin-bottom: 5px; padding-left: 20px; padding-right: 20px;}
+        .editor-header h3 { margin: 0; color: #FFFFFF; }
+        .run-btn { padding: 8px 25px; border: none; border-radius: 5px; font-weight: 500; cursor: pointer; transition: background-color 0.2s; }
+        .run-btn:disabled { background-color: #5a6268; cursor: not-allowed; }
+        .sql-editor { flex-grow: 1; width: 100%; background-color: #1f1f1f; border: none; border-top: 1px solid #2e2e2e; border-radius: 0px; color: #E0D9F0; font-family: 'Courier New', Courier, monospace; font-size: 14px; padding: 10px; box-sizing: border-box; resize: none; }
+        
+        /* Resizer */
+        .resizer { height: 1px; background-color: #9D4EDD; cursor: ns-resize; border-top: 1px solid #4a3f6e; border-bottom: 1px solid #4a3f6e; flex-shrink: 0; }
+        
+        /* Results */
+        .results-pane { flex-grow: 1; display: flex; flex-direction: column; padding-top: 20px; padding-bottom: 20px; min-height: 0; }
+        .grid-wrapper { flex-grow: 1; overflow: hidden; border-radius: 0px; }
+        #resultsGrid { height: 100%; width: 100%; }
+        .ag-root-wrapper { border-color: #2e2e2e !important; border-radius: 0px !important; }
+
+        .editor-actions { display: flex; gap: 10px; }
+        .action-btn { padding: 8px 25px; border: none; border-radius: 5px; font-size: 0.7em; font-weight: 500; cursor: pointer; transition: background-color 0.2s; }
+        .run-btn { background-color: #1E192B; color: #9D4EDD; border: 2px solid #9D4EDD; }
+        .run-btn:hover { background-color: #9D4EDD; color: #fff; }
+        .commit-btn { background-color: #242424; color: #E0D9F0; border: 2px solid #363636; }
+        .commit-btn:hover { border-color: #424242; }
+        .action-btn:disabled { border: none; background-color: #0F0F0F; color: #4d4d4d; cursor: not-allowed; }
+    </style>
+{% endblock %}
+
+{% block content %}
+<div class="sql-layout">
+    <aside class="schema-sidebar">
+        <h3>Schema</h3>
+        <div class="schema-item">
+            <div class="table-name">📄 Dataset</div>
+            <div class="column-list" id="column-list">
+                <p style="font-size: 12px; color: #a095c0;">Loading columns...</p>
+            </div>
+        </div>
+    </aside>
+    <main class="sql-main">
+        <div class="sql-editor-pane">
+            <div class="ai-generator">
+                <input type="text" id="ai-prompt-input" placeholder="✨ Describe the query you want (e.g., 'show top 5 rows')">
+                <button id="ai-generate-btn">Generate</button>
+            </div>
+            <div class="editor-header">
+                <h3>SQL Editor</h3>
+                <div class="editor-actions">
+                    <button class="action-btn run-btn">▶ Run Query</button>
+                    <button class="action-btn commit-btn" id="commit-btn" disabled>Commit as New State</button>
+                </div>
+            </div>
+            <textarea id="sql-editor" class="sql-editor"></textarea>
+        </div>
+        <div class="resizer" id="resizer"></div>
+        <div class="results-pane">
+            <div class="grid-wrapper">
+                <div id="resultsGrid" class="ag-theme-alpine-dark"></div>
+            </div>
+        </div>
+    </main>
+</div>
+{% endblock %}
+
+{% block body_scripts %}
+<script>
+document.addEventListener('DOMContentLoaded', () => {
+    // --- Page Elements ---
+    const columnListDiv = document.getElementById('column-list');
+    const resizer = document.getElementById('resizer');
+    const editorPane = document.querySelector('.sql-editor-pane');
+    const runQueryBtn = document.querySelector('.run-btn');
+    const commitBtn = document.getElementById('commit-btn');
+    const sqlEditor = document.getElementById('sql-editor');
+    const resultsGridDiv = document.querySelector('#resultsGrid');
+    const aiPromptInput = document.getElementById('ai-prompt-input');
+    const aiGenerateBtn = document.getElementById('ai-generate-btn');
+
+    // --- State variable to hold the schema context for the AI ---
+    let schemaContext = '';
+    let lastSuccessfulQuery = '';
+
+    // --- AG Grid Setup ---
+    let gridApi;
+    const gridOptions = {
+        defaultColDef: { 
+            sortable: true, 
+            filter: true, 
+            resizable: true,
+            minWidth: 150,
+        },
+        // Add this line to treat field names with dots as a single key
+        suppressFieldDotNotation: true,
+        onGridReady: (params) => {
+            gridApi = params.api;
+        }
+    };
+    agGrid.createGrid(resultsGridDiv, gridOptions);
+
+    // --- Schema Population & Context Generation ---
+    fetch('/get_schema_details')
+        .then(res => res.json())
+        .then(data => {
+            if (data.columns && data.columns.length > 0) {
+                // 1. Render the schema for the user in the sidebar
+                columnListDiv.innerHTML = data.columns.map(col => {
+                    const isNumeric = ['BIGINT', 'DOUBLE', 'INTEGER', 'FLOAT', 'DECIMAL'].some(type => col.type.includes(type));
+                    const icon = isNumeric ? '#' : '🏷️';
+                    const nullableHtml = col.nullable ? '<div class="prop-item nullable">NULL</div>' : '<div class="prop-item not-nullable">NOT NULL</div>';
+                    const uniqueHtml = col.is_unique ? '<div class="prop-item unique">UNIQUE</div>' : '';
+                    return `<div class="column-list-item"><span class="type-icon">${icon}</span><div class="column-name">${col.name}</div><div class="column-properties"><div class="prop-item">${col.type}</div>${nullableHtml}${uniqueHtml}</div></div>`;
+                }).join('');
+
+                // 2. Convert the schema JSON into a markdown string for the AI
+                let markdown = '### DATASET SCHEMA\nThe user wants to query a table named "Dataset".\n\n';
+                markdown += '| Column Name | Data Type |\n';
+                markdown += '|---|---|\n';
+                data.columns.forEach(col => {
+                    markdown += `| ${col.name} | ${col.type} |\n`;
+                });
+                
+                // 3. Store the generated markdown in our state variable
+                schemaContext = markdown;
+
+            } else {
+                 columnListDiv.innerHTML = '<p style="font-size: 12px; color: #ffc107;">Error loading schema.</p>';
+            }
+        });
+
+    // --- Pane Resizing Logic ---
+    let isResizing = false;
+    resizer.addEventListener('mousedown', (e) => {
+        isResizing = true;
+        document.addEventListener('mousemove', handleMouseMove);
+        document.addEventListener('mouseup', () => {
+            isResizing = false;
+            document.removeEventListener('mousemove', handleMouseMove);
+        });
+    });
+    function handleMouseMove(e) {
+        if (!isResizing) return;
+        const newHeight = e.clientY - editorPane.getBoundingClientRect().top;
+        if (newHeight > 100 && newHeight < (window.innerHeight - 150)) {
+            editorPane.style.height = `${newHeight}px`;
+        }
+    }
+
+    // --- Run Query Logic ---
+    runQueryBtn.addEventListener('click', async () => {
+        const sqlQuery = sqlEditor.value;
+        if (!sqlQuery.trim()) return;
+        
+        runQueryBtn.disabled = true;
+        runQueryBtn.textContent = 'Running...';
+        commitBtn.disabled = true;
+        gridApi.showLoadingOverlay();
+
+        try {
+            const response = await fetch('/execute_sql', { 
+                method: 'POST', 
+                headers: { 'Content-Type': 'application/json' }, 
+                body: JSON.stringify({ sql: sqlQuery }) 
+            });
+            const result = await response.json();
+            if (response.status !== 200) throw new Error(result.error || 'An unknown error occurred.');
+            
+            const columnDefs = result.headers.map(h => ({ field: h, headerName: h }));
+            gridApi.setGridOption('columnDefs', columnDefs);
+
+            const rowData = result.rows.map(row => {
+                let obj = {};
+                result.headers.forEach((header, index) => { obj[header] = row[index]; });
+                return obj;
+            });
+            gridApi.setGridOption('rowData', rowData);
+
+            if(rowData.length === 0) {
+                gridApi.showNoRowsOverlay();
+            }
+
+            lastSuccessfulQuery = sqlQuery;
+            commitBtn.disabled = false;
+
+        } catch (error) {
+            gridApi.setGridOption('columnDefs', []);
+            gridApi.setGridOption('rowData', []);
+            gridApi.showNoRowsOverlay();
+            alert(`Query Failed:\n${error.message}`);
+
+            lastSuccessfulQuery = '';
+            commitBtn.disabled = true;
+        } finally {
+            runQueryBtn.disabled = false;
+            runQueryBtn.textContent = '▶ Run Query';
+        }
+    });
+
+    // --- NEW: Commit Button Logic ---
+    commitBtn.addEventListener('click', async () => {
+        if (!lastSuccessfulQuery) {
+            alert("No successful query to commit. Please run a query first.");
+            return;
+        }
+
+        if (!confirm("Are you sure you want to replace the current dataset with the results of your last query? This will be saved as a new state.")) {
+            return;
+        }
+
+        commitBtn.disabled = true;
+        commitBtn.textContent = 'Committing...';
+
+        try {
+            const response = await fetch('/commit_sql_result', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ sql: lastSuccessfulQuery })
+            });
+
+            const result = await response.json();
+            if (response.status !== 200) throw new Error(result.error);
+            
+            alert(result.message);
+            // Reload the entire application to reflect the new state everywhere
+            window.location.reload();
+
+        } catch (error) {
+            alert(`Commit Failed:\n${error.message}`);
+            commitBtn.disabled = false; // Re-enable only on failure
+            commitBtn.textContent = 'Commit as New State';
+        }
+    });
+
+    // --- AI SQL Generation Logic ---
+    aiGenerateBtn.addEventListener('click', async () => {
+        const userPrompt = aiPromptInput.value.trim();
+        if (!userPrompt) {
+            alert("Please describe the query you want to generate.");
+            return;
+        }
+        if (!schemaContext) {
+            alert("Schema is still loading. Please wait a moment and try again.");
+            return;
+        }
+
+        aiGenerateBtn.disabled = true;
+        aiGenerateBtn.textContent = 'Generating...';
+        try {
+            const response = await fetch('/generate_sql_query', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ 
+                    prompt: userPrompt,
+                    context: schemaContext 
+                })
+            });
+            const result = await response.json();
+            if (result.error) throw new Error(result.error);
+            if (result.sql_query && result.sql_query !== '0') {
+                sqlEditor.value = result.sql_query;
+            } else {
+                alert("The AI could not generate a valid query from your description. Please try being more specific.");
+            }
+        } catch (error) {
+            alert(`An error occurred: ${error.message}`);
+        } finally {
+            aiGenerateBtn.disabled = false;
+            aiGenerateBtn.textContent = 'Generate';
+        }
+    });
+
+    // --- Set default query in editor ---
+    sqlEditor.value = `SELECT * FROM "Dataset" LIMIT 100;`;
+});
+</script>
+{% endblock %}

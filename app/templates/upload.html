@@ -1,0 +1,557 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Upload or Connect Dataset</title>
+    <style>
+        /* --- General Body & Font Styles --- */
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            background-color: #1E1B2B;
+            color: #E0D9F0;
+            margin: 0;
+        }
+        .page-wrapper {
+            padding: 80px;
+            background-color: #0F0F0F;
+        }
+
+        /* --- Top Navigation Bar Styles --- */
+        .top-nav-bar {
+            height: 50px;
+            width: 100%;
+            background-color: #171717;
+            border-bottom: 1px solid #2e2e2e;
+            display: flex;
+            align-items: center;
+            padding: 0 20px;
+            box-sizing: border-box;
+            flex-shrink: 0; /* Prevent the navbar from shrinking */
+            position: fixed;
+        }
+        .top-nav-content {
+            width: 100%;
+            display: grid;
+            grid-template-columns: 1fr auto 1fr;
+            align-items: center;
+        }
+        .top-nav-brand {
+            justify-self: start;
+            font-size: 1.2em;
+            font-weight: bold;
+            color: #FFFFFF;
+        }
+        .top-nav-user {
+            justify-self: end;
+            position: relative;
+        }
+        .user-menu-btn {
+            background-color: #0F0F0F;
+            border: 1px solid #363636;
+            border-radius: 50%;
+            width: 36px;
+            height: 36px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            transition: background-color 0.2s;
+        }
+        .user-menu-btn:hover {
+            background-color: #4a3f6e;
+        }
+        .user-menu-btn svg {
+            width: 20px;
+            height: 20px;
+            stroke: #a095c0;
+        }
+        .user-menu-dropdown {
+            display: none; /* Hidden by default */
+            position: absolute;
+            top: calc(100% + 10px); /* Position below the button */
+            right: 0;
+            width: 280px;
+            background-color: #1f1f1f;
+            border: 1px solid #2e2e2e;
+            border-radius: 8px;
+            box-shadow: 0 8px 16px rgba(0,0,0,0.3);
+            z-index: 1001;
+            padding: 15px;
+        }
+        .user-menu-dropdown.show { display: block; }
+        .user-info-header { border-bottom: 1px solid #4a3f6e; padding-bottom: 10px; margin-bottom: 10px; }
+        .user-info-header .email { font-weight: 500; color: #FFFFFF; word-break: break-all; }
+        .user-info-item { display: flex; justify-content: space-between; font-size: 14px; margin-bottom: 8px; }
+        .info-label { color: #a095c0; }
+        .info-value { font-weight: 500; color: #E0D9F0; }
+        .user-menu-dropdown .logout-button {
+            width: 100%; text-align: center; margin-top: 15px;
+            background-color: #dc3545; border-color: #dc3545;
+            color: #E0D9F0; padding: 6px 12px; border-radius: 5px; text-decoration: none;
+            font-size: 12px; font-weight: 500; border: 1px solid #dc3545;
+        }
+        .admin-dashboard-button {
+            display: block; width: 100%; text-align: center; margin-top: 15px;
+            background-color: #007bff; border: 1px solid #007bff; color: white;
+            padding: 8px 12px; border-radius: 5px; text-decoration: none;
+            font-size: 14px; font-weight: 500; transition: all 0.2s ease;
+            box-sizing: border-box;
+        }
+        .admin-dashboard-button:hover { background-color: #0069d9; }
+
+        /* --- Main Content and Form Styles --- */
+        h1, h2 { color: #FFFFFF; }
+
+        input[type="file"] {
+            border: 2px dashed #424242; padding: 20px; border-radius: 8px;
+            background-color: #242424; color: #E0D9F0; cursor: pointer;
+            margin-bottom: 20px; display: block; width: 100%; box-sizing: border-box;
+        }
+        input[type="submit"] {
+            background-color: #1E192B; color: #9D4EDD; padding: 12px 25px;
+            border: 1px solid #9D4EDD; border-radius: 8px; font-size: 0.8em;
+            cursor: pointer; transition: background-color 0.3s; font-weight: 500;
+        }
+        input[type="submit"]:hover { background-color: #9D4EDD; color: #fff; }
+        .divider { display: flex; align-items: center; text-align: center; color: #a095c0; margin: 30px 0; }
+        .divider::before, .divider::after { content: ''; flex: 1; border-bottom: 1px solid #4a3f6e; }
+        .divider:not(:empty)::before { margin-right: .25em; }
+        .divider:not(:empty)::after { margin-left: .25em; }
+        
+        .db-connector-form { text-align: left; }
+        .db-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 15px; }
+        .form-group { margin-bottom: 15px; }
+        .form-group.full-width { grid-column: 1 / -1; }
+        .form-group label { display: block; margin-bottom: 5px; font-size: 14px; color: #a095c0; }
+        .form-group input, .form-group select {
+            width: 100%; padding: 10px; border-radius: 8px;
+            border: 1px solid #363636; background-color: #1f1f1f;
+            color: #fafafa; font-size: 14px; box-sizing: border-box;
+        }
+        .db-btn {
+            width: 100%; background-color: #1f1f1f; color: #898989; padding: 12px;
+            border: 1px solid #2e2e2e; border-radius: 8px; font-size: 0.8em; cursor: pointer;
+            transition: background-color 0.3s; margin-top: 10px;
+        }
+        .db-btn:hover:not(:disabled) { background-color: #2C2541; color: white; }
+        .db-btn:disabled { border: none; background-color: #0F0F0F; color: #4d4d4d; cursor: not-allowed; }
+        #status-message { margin-top: 15px; font-weight: 500; min-height: 20px; }
+        .status-error { color: #ffc107; }
+        .status-success { color: #28a745; }
+        .flash-message { padding: 15px; border-radius: 5px; margin-bottom: 20px; }
+        .flash-message.error, .flash-message.None { background-color: #492328; color: #ffc107; border: 1px solid #dc3545; }
+        .flash-message.success { background-color: #1c4b27; color: #a3e9b4; border: 1px solid #28a745; }
+
+        /* --- ADMIN SECTION STYLES --- */
+        .admin-grid { display: grid; grid-template-columns: 2fr 1fr; }
+        .card { 
+            background-color: #0f0f0f; border: 1px solid #2e2e2e; 
+            border-radius: 0px; padding: 20px;
+            text-align: left;
+        }
+        .card h3 { 
+            margin-top: 0; color: #E0D9F0; border-bottom: 1px solid #4a3f6e; 
+            padding-bottom: 10px; 
+        }
+        .team-table { width: 100%; border-collapse: collapse; }
+        .team-table th, .team-table td { font-size: 0.8em; padding: 12px; text-align: left; border-bottom: 1px solid #2C2541; }
+        .team-table th { color: #a095c0; }
+        .team-table td .role-badge { 
+            background-color: #9D4EDD; color: white; padding: 4px 8px; 
+            border-radius: 12px; font-size: 12px; 
+        }
+        .action-btn { 
+            background: none; border: 1px solid #363636; color: #E0D9F0; 
+            padding: 6px 12px; border-radius: 9999px; cursor: pointer; 
+            transition: all 0.2s; font-family: inherit; font-size: 12px;
+            background-color: #242424;
+        }
+        .action-btn:hover:not(:disabled) { background-color: #4a3f6e; color: white; }
+        .action-btn.remove { border-color: #dc3545; color: #dc3545; }
+        .action-btn.remove:hover { background-color: #dc3545; color: white; }
+        .action-btn:disabled { border-color: #2C2541; color: #4a3f6e; cursor: not-allowed; }
+        .usage-metrics-grid {
+            display: flex; justify-content: space-around; text-align: center; padding-top: 10px;
+        }
+        .metric-item h3 { font-size: 2.5em; color: #9D4EDD; margin: 0; }
+        .metric-item p { color: #a095c0; margin-top: 5px; font-size: 1em; }
+        .invite-form { display: flex; flex-direction: column; gap: 15px; }
+        .invite-form input { padding: 10px; border-radius: 5px; border: 1px solid #363636; background-color: #1f1f1f; color: #fafafa; }
+        .invite-form button { 
+            background-color: #1f1f1f; color: #898989; padding: 12px; border: 1px solid #2e2e2e; 
+            border-radius: 8px; font-size: 0.8em; cursor: pointer; 
+        }
+        .invite-form button:hover {
+            background-color: #2C2541;
+            color: white;
+        }
+
+
+        /* --- Styles for Saved Files Section --- */
+        .saved-files-container, .container, .admin-dashboard-preview {
+            background-color: #171717;
+            padding: 40px;
+            box-shadow: 0 10px 25px rgba(0,0,0,0.3);
+            width: 100%;
+            margin: auto;
+            box-sizing: border-box;
+            border: 1px solid #2e2e2e;
+            margin-bottom: 40px;
+        }
+        .file-list {
+            margin-top: 20px;
+            max-height: 300px; /* Limit height and make scrollable */
+            overflow-y: auto;
+        }
+        .file-item {
+            display: flex;
+            align-items: center;
+            padding: 15px;
+            background-color: #1f1f1f;
+            border-radius: 8px;
+            border: 1px solid #2e2e2e;
+            color: #E0D9F0;
+            margin-bottom: 10px;
+        }
+        .file-info {
+            flex-grow: 1;
+            text-align: left;
+        }
+        .file-name {
+            font-weight: 500;
+            color: #FFFFFF;
+        }
+        .file-size {
+            font-size: 12px;
+            color: #a095c0;
+        }
+        .file-actions {
+            display: flex;
+            gap: 15px;
+        }
+        .file-action-btn {
+            background: none;
+            border: none;
+            cursor: pointer;
+            color: #a095c0;
+            padding: 0;
+        }
+        .file-action-btn:hover { color: white; }
+        .file-action-btn svg { width: 20px; height: 20px; }
+        .file-open-btn {
+            background-color: #242424;
+            border: 1px solid #363636;
+            color: #E0D9F0;
+            padding: 8px 15px;
+            border-radius: 9999px;
+            cursor: pointer;
+            font-weight: 500;
+            font-size: 14px;
+            text-decoration: none;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            transition: all 0.2s;
+        }
+        .file-open-btn:hover {
+            border-color: #424242;
+        }
+    </style>
+</head>
+<body>
+
+    <header class="top-nav-bar">
+        <div class="top-nav-content">
+            <div class="top-nav-brand">
+                <img src="{{ url_for('static', filename='img/logo.png') }}" alt="DataWarp Logo" style="height: 30px; vertical-align: middle;">
+            </div>
+            <div class="top-nav-center"></div>
+            <div class="top-nav-user">
+                {% if session['user'] %}
+                    <button class="user-menu-btn" id="user-menu-btn" title="User Menu">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path><circle cx="12" cy="7" r="4"></circle></svg>
+                    </button>
+                    <div class="user-menu-dropdown" id="user-menu-dropdown">
+                        <div class="user-info-header"><div class="email">{{ session['user']['email'] }}</div></div>
+                        <div class="user-info-item"><span class="info-label">Organization:</span><span class="info-value">{{ session.get('org_name', 'N/A') }}</span></div>
+                        <div class="user-info-item"><span class="info-label">Role:</span><span class="info-value">{{ session.get('role', 'user') | capitalize }}</span></div>
+                        {% if session.get('role') == 'admin' %}<a href="{{ url_for('admin_dashboard') }}" class="admin-dashboard-button">Admin Dashboard</a>{% endif %}
+                        <hr style="border-color: #4a3f6e; margin-top: 15px;">
+                        <a href="{{ url_for('logout') }}" class="logout-button">Logout</a>
+                    </div>
+                {% endif %}
+            </div>
+        </div>
+    </header>
+
+    <div class="page-wrapper">
+        <!-- START: NEW SAVED FILES SECTION -->
+        <div class="saved-files-container">
+            <h2>Your Datasets</h2>
+            <div class="file-list" id="file-list">
+                {% if saved_files %}
+                    {% for file in saved_files %}
+                        <div class="file-item">
+                            <!-- File Info remains the same -->
+                            <div class="file-info">
+                                <div class="file-name">{{ file.name }}</div>
+                                <div class="file-size">{{ file.size }}</div>
+                            </div>
+                            <!-- Actions are now grouped -->
+                            <div class="file-actions">
+                                <!-- NEW: The "Open" button is a form submit button -->
+                                <form action="{{ url_for('open_file') }}" method="POST" style="margin:0;">
+                                    <input type="hidden" name="filename" value="{{ file.name }}">
+                                    <button type="submit" class="file-open-btn" title="Open {{ file.name }}">
+                                        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line><polyline points="10 9 9 9 8 9"></polyline></svg>
+                                        Open
+                                    </button>
+                                </form>
+                                <button class="file-action-btn rename-btn" data-name="{{ file.name }}" title="Rename">
+                                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path></svg>
+                                </button>
+                                <button class="file-action-btn delete-btn" data-name="{{ file.name }}" title="Delete">
+                                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>
+                                </button>
+                            </div>
+                        </div>
+                    {% endfor %}
+                {% else %}
+                    <p style="color: #a095c0;">You haven't uploaded any datasets yet.</p>
+                {% endif %}
+            </div>
+        </div>
+        <!-- END: NEW SAVED FILES SECTION -->
+
+        <div class="container">
+            <h1>Upload or Connect</h1>
+            <p>Upload a file or connect directly to your database to begin.</p>
+            {% with messages = get_flashed_messages(with_categories=true) %}
+                {% if messages %}
+                    {% for category, message in messages %}
+                        {% if category != 'success' %}
+                            <div class="flash-message {{ category }}">{{ message }}</div>
+                        {% endif %}
+                    {% endfor %}
+                {% endif %}
+            {% endwith %}
+            <form method="post" enctype="multipart/form-data">
+                <input type="file" name="file">
+                <input type="submit" value="Upload & Analyze File">
+            </form>
+            <div class="divider">OR</div>
+            <div id="db-connector-section">
+                <div id="connection-step">
+                    <form id="db-connector-form" class="db-connector-form">
+                        <div class="form-group full-width"><label for="db-type">Database Type</label><select id="db-type" name="db_type"><option value="postgresql">PostgreSQL</option><option value="mysql">MySQL</option></select></div>
+                        <div class="db-grid">
+                            <div class="form-group"><label for="db-host">Host</label><input type="text" id="db-host" name="host" value="localhost" required></div>
+                            <div class="form-group"><label for="db-port">Port</label><input type="text" id="db-port" name="port" value="5432" required></div>
+                            <div class="form-group"><label for="db-user">User</label><input type="text" id="db-user" name="user" required></div>
+                            <div class="form-group"><label for="db-password">Password</label><input type="password" id="db-password" name="password" required></div>
+                        </div>
+                        <div class="form-group full-width"><label for="db-name">Database Name</label><input type="text" id="db-name" name="dbname" required></div>
+                        <button type="submit" id="connect-btn" class="db-btn">Connect & Fetch Tables</button>
+                    </form>
+                </div>
+                <div id="table-selection-step" style="display: none;">
+                    <div class="form-group"><label for="table-select">Select a Table to Import</label><select id="table-select"></select></div>
+                    <button id="import-btn" class="db-btn">Import Table</button>
+                </div>
+                <div id="status-message"></div>
+            </div>
+        </div>
+
+        {% if session.get('role') == 'admin' %}
+        <div class="admin-dashboard-preview">
+            <h2>Admin Quick View</h2>
+            {% with messages = get_flashed_messages(with_categories=true) %}
+                {% if messages %}
+                    {% for category, message in messages %}
+                        <div class="flash-message {{ category }}">{{ message }}</div>
+                    {% endfor %}
+                {% endif %}
+            {% endwith %}
+            <div class="admin-grid">
+                <div class="card">
+                    <h3>Team Members</h3>
+                    <table class="team-table">
+                        <thead><tr><th>Email</th><th>Role</th><th>Actions</th></tr></thead>
+                        <tbody>
+                            {% for member in members %}
+                            <tr>
+                                <td>{{ member.id.email }}{% if member.id.id == session.user.id %} <span style="color: #a095c0; font-size: 12px;">(You)</span>{% endif %}</td>
+                                <td><span class="role-badge">{{ member.role }}</span></td>
+                                <td>
+                                    {% if member.id.id != session.user.id %}
+                                        <form method="POST" action="{{ url_for('set_role', user_id=member.id.id) }}" style="display: inline-block;">
+                                            <input type="hidden" name="source_page" value="upload_file">
+                                            <input type="hidden" name="role" value="{{ 'admin' if member.role == 'user' else 'user' }}">
+                                            <button type="submit" class="action-btn">{{ 'Promote to Admin' if member.role == 'user' else 'Demote to User' }}</button>
+                                        </form>
+                                        <form method="POST" action="{{ url_for('remove_user', user_id=member.id.id) }}" style="display: inline-block;" onsubmit="return confirm('Are you sure? This is permanent.');">
+                                            <input type="hidden" name="source_page" value="upload_file">
+                                            <button type="submit" class="action-btn remove">Remove</button>
+                                        </form>
+                                    {% else %}
+                                        <button class="action-btn remove" disabled>Remove</button>
+                                    {% endif %}
+                                </td>
+                            </tr>
+                            {% else %}
+                            <tr><td colspan="3" style="text-align: center; color: #a095c0;">No other team members found.</td></tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+                <div class="card">
+                    <h3>Invite New User</h3>
+                    <form class="invite-form" method="POST" action="{{ url_for('invite_user') }}">
+                        <input type="hidden" name="source_page" value="upload_file">
+                        <p style="font-size: 12px; color:#a095c0;">Create a new team member account.</p>
+                        <input type="email" name="email" placeholder="New user's email" required>
+                        <input type="password" name="password" placeholder="Set a temporary password" required>
+                        <button type="submit">Create & Invite User</button>
+                    </form>
+                </div>
+            </div>
+            <div class="card">
+                <h3>Usage Overview</h3>
+                <div class="usage-metrics-grid">
+                    <div class="metric-item"><h3>{{ "{:,}".format(usage.get('user_count', 0)) }}</h3><p>Team Members</p></div>
+                    <div class="metric-item"><h3>{{ "{:,}".format(usage.get('pipeline_count', 0)) }}</h3><p>Saved Pipelines</p></div>
+                    <div class="metric-item"><h3>{{ "{:,}".format(usage.get('rows_processed', 0)) }}</h3><p>Total Rows Processed</p></div>
+                </div>
+            </div>
+        </div>
+        {% endif %}
+    </div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            // --- User Menu Dropdown Logic ---
+            const userMenuBtn = document.getElementById('user-menu-btn');
+            const userMenuDropdown = document.getElementById('user-menu-dropdown');
+            if (userMenuBtn && userMenuDropdown) {
+                userMenuBtn.addEventListener('click', (e) => { e.stopPropagation(); userMenuDropdown.classList.toggle('show'); });
+                window.addEventListener('click', (e) => { if (!userMenuBtn.contains(e.target) && !userMenuDropdown.contains(e.target)) { userMenuDropdown.classList.remove('show'); } });
+            }
+
+            // --- Database Connector Logic ---
+            const connectBtn = document.getElementById('connect-btn');
+            const importBtn = document.getElementById('import-btn');
+            const dbForm = document.getElementById('db-connector-form');
+            const statusMessage = document.getElementById('status-message');
+            const connectionStep = document.getElementById('connection-step');
+            const tableSelectionStep = document.getElementById('table-selection-step');
+            const tableSelect = document.getElementById('table-select');
+            const dbTypeSelect = document.getElementById('db-type');
+            const portInput = document.getElementById('db-port');
+            let currentConnectionDetails = {};
+
+            // --- NEW: File List Action Logic ---
+            const fileList = document.getElementById('file-list');
+            if (fileList) {
+                fileList.addEventListener('click', async (e) => {
+                    const renameBtn = e.target.closest('.rename-btn');
+                    const deleteBtn = e.target.closest('.delete-btn');
+
+                    if (renameBtn) {
+                        const oldName = renameBtn.dataset.name;
+                        const newName = prompt(`Enter a new name for "${oldName}":`, oldName);
+                        
+                        if (newName && newName.trim() && newName !== oldName) {
+                            try {
+                                const res = await fetch('/rename_file', {
+                                    method: 'POST',
+                                    headers: { 'Content-Type': 'application/json' },
+                                    body: JSON.stringify({ old_name: oldName, new_name: newName })
+                                });
+                                const result = await res.json();
+                                if (!res.ok) throw new Error(result.error);
+                                alert(result.message);
+                                window.location.reload();
+                            } catch (error) {
+                                alert(`Rename failed: ${error.message}`);
+                            }
+                        }
+                    }
+
+                    if (deleteBtn) {
+                        const filename = deleteBtn.dataset.name;
+                        if (confirm(`Are you sure you want to permanently delete "${filename}"? This cannot be undone.`)) {
+                            try {
+                                const res = await fetch('/delete_file', {
+                                    method: 'POST',
+                                    headers: { 'Content-Type': 'application/json' },
+                                    body: JSON.stringify({ filename: filename })
+                                });
+                                const result = await res.json();
+                                if (!res.ok) throw new Error(result.error);
+                                alert(result.message);
+                                window.location.reload();
+                            } catch (error) {
+                                alert(`Delete failed: ${error.message}`);
+                            }
+                        }
+                    }
+                });
+            }
+            
+            if(dbTypeSelect) {
+                dbTypeSelect.addEventListener('change', () => { portInput.value = (dbTypeSelect.value === 'postgresql') ? '5432' : '3306'; });
+            }
+
+            if(dbForm) {
+                dbForm.addEventListener('submit', async (e) => {
+                    e.preventDefault();
+                    connectBtn.disabled = true;
+                    connectBtn.textContent = 'Connecting...';
+                    statusMessage.className = '';
+                    statusMessage.textContent = 'Attempting to connect to the database...';
+                    const formData = new FormData(dbForm);
+                    const payload = Object.fromEntries(formData.entries());
+                    currentConnectionDetails = payload;
+                    try {
+                        const response = await fetch("{{ url_for('test_db_connection') }}", { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
+                        const result = await response.json();
+                        if (!response.ok) throw new Error(result.error);
+                        statusMessage.className = 'status-success';
+                        statusMessage.textContent = `Success! Found ${result.tables.length} tables.`;
+                        tableSelect.innerHTML = result.tables.map(table => `<option value="${table}">${table}</option>`).join('');
+                        connectionStep.style.display = 'none';
+                        tableSelectionStep.style.display = 'block';
+                    } catch (error) {
+                        statusMessage.className = 'status-error';
+                        statusMessage.textContent = `Connection Failed: ${error.message}`;
+                        connectBtn.disabled = false;
+                        connectBtn.textContent = 'Connect & Fetch Tables';
+                    }
+                });
+            }
+
+            if(importBtn) {
+                importBtn.addEventListener('click', async () => {
+                    importBtn.disabled = true;
+                    importBtn.textContent = 'Importing...';
+                    statusMessage.className = '';
+                    statusMessage.textContent = 'Importing table data. This may take a moment for large tables...';
+                    const payload = { ...currentConnectionDetails, table_name: tableSelect.value };
+                    try {
+                        const response = await fetch("{{ url_for('import_db_table') }}", { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
+                        const result = await response.json();
+                        if (!response.ok) throw new Error(result.error);
+                        window.location.href = "{{ url_for('data_preview') }}";
+                    } catch (error) {
+                        statusMessage.className = 'status-error';
+                        statusMessage.textContent = `Import Failed: ${error.message}`;
+                        importBtn.disabled = false;
+                        importBtn.textContent = 'Import Table';
+                    }
+                });
+            }
+        });
+    </script>
+</body>
+</html>

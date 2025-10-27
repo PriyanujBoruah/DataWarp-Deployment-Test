@@ -1,0 +1,521 @@
+{% extends "base.html" %}
+
+{% block title %}Visualizations Dashboard{% endblock %}
+
+{% block head_content %}
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chartjs-chart-treemap@2.3.0/dist/chartjs-chart-treemap.min.js"></script>
+    <style>
+        .viz-sidebar, .viz-main { scrollbar-width: thin; scrollbar-color: #313131 #171717; }
+
+        /* --- Visualizations View Layout --- */
+        .viz-layout { display: flex; height: 100%; overflow: hidden; }
+        .viz-sidebar { width: 280px; flex-shrink: 0; background-color: #171717; border-right: 1px solid #2e2e2e; padding: 20px; overflow-y: auto; }
+        .viz-sidebar h3 { margin-top: 0; color: #FFFFFF; border-bottom: 1px solid #2C2541; padding-bottom: 10px; }
+        
+        .options-group { margin-bottom: 25px; }
+        .options-group label { display: block; color: #a095c0; font-weight: 500; margin-bottom: 8px; }
+        .options-group select { width: 100%; padding: 10px; border-radius: 5px; border: 1px solid #363636; background-color: #1f1f1f; color: #fafafa; box-sizing: border-box; font-size: 0.7em; }
+
+        /* --- NEW: Python Chart Preview Styles --- */
+        #py-chart-previews { display: flex; flex-direction: column; gap: 15px; }
+        .py-chart-container h5 { margin: 0 0 8px 0; color: #a095c0; font-size: 14px; text-align: center; }
+        .py-chart-img-placeholder {
+            background-color: #1f1f1f; border: 1px solid #363636; border-radius: 8px;
+            aspect-ratio: 5 / 4; display: flex; justify-content: center; align-items: center;
+            cursor: pointer;
+        }
+        .py-chart-img-placeholder img { width: 100%; height: 100%; object-fit: contain; border-radius: 8px; }
+        .loader {
+            border: 5px solid #4a3f6e; border-top: 5px solid #9D4EDD;
+            border-radius: 50%; width: 40px; height: 40px;
+            animation: spin 1s linear infinite;
+        }
+        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+
+        /* Main Content (Chart Canvas) */
+        .viz-main { flex-grow: 1; padding: 20px; overflow-y: auto; background-color: #0F0F0F; }
+        .chart-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(400px, 1fr)); gap: 20px; }
+        .chart-card { background-color: #1f1f1f; border: 1px solid #363636; border-radius: 8px; padding: 20px; }
+        .chart-card h4 { margin-top: 0; margin-bottom: 15px; color: #FFFFFF; text-align: center; }
+
+        /* Bivariate Section Styles */
+        .bivariate-section { grid-column: 1 / -1; margin-top: 20px; padding-top: 20px; border-top: 2px solid #161220; }
+        .bivariate-controls { display: flex; flex-wrap: wrap; gap: 15px; align-items: center; background-color: #171717; padding: 15px; border-radius: 8px; margin-bottom: 20px; }
+        .bivariate-controls label { font-weight: 500; color: #a095c0; }
+        .bivariate-controls select { padding: 8px; border-radius: 5px; border: 1px solid #363636; background-color: #1f1f1f; color: #fafafa; }
+
+
+
+        /* --- NEW: Modal for Python Chart Export --- */
+        .py-chart-modal-overlay {
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(30, 25, 43, 0.7); backdrop-filter: blur(5px);
+            z-index: 2000; display: none; justify-content: center; align-items: center;
+        }
+        .py-chart-modal-content {
+            background-color: #161220; border: 1px solid #4a3f6e; border-radius: 8px;
+            padding: 20px; width: 90%; max-width: 800px; text-align: center;
+            position: relative; /* For the close button */
+        }
+        #py-chart-modal-image { max-width: 100%; max-height: calc(90vh - 120px); }
+        .modal-download-actions { margin-top: 20px; display: flex; justify-content: center; gap: 15px; }
+        .download-btn {
+            background-color: #2C2541; color: #E0D9F0; padding: 10px 20px; border: 1px solid #4a3f6e;
+            border-radius: 5px; text-decoration: none; font-weight: 500; transition: background-color 0.2s;
+        }
+        .download-btn:hover { background-color: #9D4EDD; color: white; border-color: #9D4EDD; }
+        .modal-close-btn { position: absolute; top: 10px; right: 15px; background:none; border:none; color: #a095c0; font-size: 28px; cursor: pointer; line-height: 1; }
+
+
+
+        /* --- NEW: Theme Toggle Styles --- */
+        .theme-toggle {
+            display: flex;
+            background-color: #1E192B;
+            border: 1px solid #4a3f6e;
+            border-radius: 5px;
+            overflow: hidden;
+        }
+        .theme-btn {
+            flex: 1;
+            padding: 8px;
+            background-color: transparent;
+            border: none;
+            color: #a095c0;
+            font-weight: 500;
+            cursor: pointer;
+            transition: background-color 0.2s, color 0.2s;
+        }
+        .theme-btn.active {
+            background-color: #9D4EDD;
+            color: white;
+        }
+    </style>
+{% endblock %}
+
+{% block content %}
+<div class="viz-layout">
+    <aside class="viz-sidebar">
+        <h3>Select Column</h3>
+        <div class="options-group">
+            <label for="column-select-dropdown">Target Column</label>
+            <select id="column-select-dropdown">
+                <option>Loading columns...</option>
+            </select>
+        </div>
+        
+        <!-- MODIFIED: ADVANCED CHARTS SECTION -->
+        <hr style="border-color: #2C2541; margin: 30px 0;">
+        <div id="advanced-charts-container">
+            <h3>Static Chart Previews</h3>
+            <div class="options-group">
+                <label>Chart Theme</label>
+                <div class="theme-toggle" id="theme-toggle">
+                    <button class="theme-btn active" data-theme="native">Native</button>
+                    <button class="theme-btn" data-theme="white">White</button>
+                </div>
+            </div>
+            <div id="py-chart-previews">
+                <p style="font-size: 14px; color: #a095c0;">Select a column to see available charts.</p>
+            </div>
+        </div>
+    </aside>
+    <main class="viz-main">
+        <div id="chart-grid" class="chart-grid"></div>
+        <div id="bivariate-section" class="bivariate-section" style="display: none;">
+            <h2 style="color:white; margin-top:0;">Bivariate Analysis</h2>
+            <div id="bivariate-controls-container"></div>
+            <div id="bivariate-chart-grid" class="chart-grid"></div>
+        </div>
+    </main>
+</div>
+
+<div class="py-chart-modal-overlay" id="py-chart-modal-overlay">
+    <div class="py-chart-modal-content">
+        <button class="modal-close-btn" id="modal-close-btn">&times;</button>
+        <img id="py-chart-modal-image" src="" alt="Chart Preview">
+        <div class="modal-download-actions">
+            <a href="#" id="download-svg-btn" class="download-btn" download>Download as SVG</a>
+            <a href="#" id="download-png-btn" class="download-btn" download>Download as PNG</a>
+        </div>
+    </div>
+</div>
+
+{% endblock %}
+
+{% block body_scripts %}
+<script>
+    document.addEventListener('DOMContentLoaded', () => {
+        const columnSelectDropdown = document.getElementById('column-select-dropdown');
+        const chartGrid = document.getElementById('chart-grid');
+        const bivariateSection = document.getElementById('bivariate-section');
+        const bivariateControlsContainer = document.getElementById('bivariate-controls-container');
+        const bivariateChartGrid = document.getElementById('bivariate-chart-grid');
+        
+        // --- NEW: Python Chart Previews Container ---
+        const pyChartPreviewsContainer = document.getElementById('py-chart-previews');
+
+        const themeToggle = document.getElementById('theme-toggle');
+        let currentTheme = 'native';
+
+        const pyChartModalOverlay = document.getElementById('py-chart-modal-overlay');
+        const pyChartModalImage = document.getElementById('py-chart-modal-image');
+        const modalCloseBtn = document.getElementById('modal-close-btn');
+        const downloadSvgBtn = document.getElementById('download-svg-btn');
+        const downloadPngBtn = document.getElementById('download-png-btn');
+        
+        let activeCharts = {};
+        let columnsWithTypes = [];
+
+        // --- Fetch columns and populate UI ---
+        fetch('/get_schema_details')
+            .then(res => res.json())
+            .then(data => {
+                if (data.columns) {
+                    columnsWithTypes = data.columns.map(col => ({ name: col.name, type: col.type.includes('VARCHAR') ? 'categorical' : 'numeric' }));
+                    columnSelectDropdown.innerHTML = columnsWithTypes.map(col => `<option value="${col.name}" data-column-type="${col.type}">${col.name}</option>`).join('');
+                    columnSelectDropdown.addEventListener('change', handleColumnSelection);
+                    if (columnsWithTypes.length > 0) { handleColumnSelection(); }
+                } else { columnSelectDropdown.innerHTML = '<option>Error loading columns</option>'; }
+            });
+
+        // --- ADD THESE NEW EVENT LISTENERS ---
+        // Listener for opening the modal when a thumbnail is clicked
+        pyChartPreviewsContainer.addEventListener('click', (event) => {
+            const placeholder = event.target.closest('.py-chart-img-placeholder');
+            const img = placeholder ? placeholder.querySelector('img') : null;
+            
+            // Proceed only if a rendered image inside a placeholder was clicked
+            if (img) {
+                const chartType = placeholder.id.replace('placeholder-', '');
+                const columnName = columnSelectDropdown.value;
+                
+                // Set the large image source in the modal
+                pyChartModalImage.src = img.src;
+                
+                // Construct the base URL for the export endpoint
+                const baseUrl = `/export_python_chart?chart_type=${chartType}&x_col=${encodeURIComponent(columnName)}&theme=${currentTheme}`;
+                
+                // Set the href for both download buttons
+                downloadSvgBtn.href = `${baseUrl}&export_format=svg`;
+                downloadPngBtn.href = `${baseUrl}&export_format=png`;
+
+                // Show the modal
+                pyChartModalOverlay.style.display = 'flex';
+            }
+        });
+
+        // Listeners for closing the modal
+        modalCloseBtn.addEventListener('click', () => pyChartModalOverlay.style.display = 'none');
+        pyChartModalOverlay.addEventListener('click', (e) => {
+            // Close only if the dark overlay area is clicked, not the content inside it
+            if (e.target === pyChartModalOverlay) {
+                pyChartModalOverlay.style.display = 'none';
+            }
+        });
+
+        themeToggle.addEventListener('click', (event) => {
+            if (event.target.matches('.theme-btn')) {
+                const selectedTheme = event.target.dataset.theme;
+                if (selectedTheme === currentTheme) return; // Do nothing if the theme is already active
+
+                // Update UI state
+                themeToggle.querySelector('.active').classList.remove('active');
+                event.target.classList.add('active');
+                currentTheme = selectedTheme;
+                
+                // THE FIX: Instead of calling the master function that refreshes everything,
+                // we get the current column info from the dropdown and call ONLY the
+                // function responsible for the sidebar's Python charts.
+                const selectedOption = columnSelectDropdown.selectedOptions[0];
+                const columnName = selectedOption.value;
+                const columnType = selectedOption.dataset.columnType;
+                
+                renderPythonChartPreviews(columnName, columnType);
+            }
+        });
+
+        // --- Central handler for column selection change ---
+        function handleColumnSelection() {
+            const selectedOption = columnSelectDropdown.selectedOptions[0];
+            const columnName = selectedOption.value;
+            const columnType = selectedOption.dataset.columnType;
+            
+            renderChartsForColumn(columnName, columnType);
+            // --- NEW: Trigger Python chart generation ---
+            renderPythonChartPreviews(columnName, columnType);
+        }
+
+        // --- NEW: Function to render Python chart previews ---
+        async function renderPythonChartPreviews(columnName, columnType) {
+            let chartsToLoad = [];
+            if (columnType === 'numeric') {
+                chartsToLoad = [
+                    { id: 'violin', title: 'Violin Plot' }, { id: 'boxplot', title: 'Box Plot' }, { id: 'displot', title: 'Distribution' },
+                    { id: 'kdeplot', title: 'KDE Plot' }, { id: 'ecdfplot', title: 'ECDF Plot' }, { id: 'rugplot', title: 'Rug Plot' },
+                    { id: 'scatterplot', title: 'Scatter Plot' }, { id: 'jointplot', title: 'Joint Plot' }, { id: 'hexbin', title: 'Hexbin Plot' },
+                    { id: 'kde2d', title: '2D KDE Plot' }, { id: 'lineplot', title: 'Line Plot' }, { id: 'regplot', title: 'Regression Plot' },
+                    { id: 'stripplot', title: 'Strip Plot' }, { id: 'swarmplot', title: 'Swarm Plot' }, { id: 'pointplot', title: 'Point Plot' },
+                    { id: 'barplot', title: 'Bar Plot (Mean)' }, { id: 'heatmap', title: 'Correlation Heatmap' }, { id: 'pairplot', title: 'Pair Plot Grid' }
+                ];
+            } else if (columnType === 'categorical') {
+                chartsToLoad = [
+                    { id: 'countplot', title: 'Count Plot' },
+                    { id: 'pieplot', title: 'Pie Chart' },
+                    { id: 'cat_boxplot', title: 'Box Plot vs. Numeric' },
+                    { id: 'cat_violinplot', title: 'Violin Plot vs. Numeric' },
+                    { id: 'cat_barplot', title: 'Bar Plot vs. Numeric' },
+                    { id: 'grouped_countplot', title: 'Grouped Count Plot' },
+                    { id: 'cat_heatmap', title: 'Heatmap vs. Categorical' }
+                ];
+            }
+
+            // 1. Render all placeholders with loaders instantly
+            pyChartPreviewsContainer.innerHTML = chartsToLoad.map(chart => `
+                <div class="py-chart-container">
+                    <h5>${chart.title}</h5>
+                    <div class="py-chart-img-placeholder" id="placeholder-${chart.id}">
+                        <div class="loader"></div>
+                    </div>
+                </div>
+            `).join('') || `<p style="font-size: 14px; color: #a095c0;">No advanced charts for this column type.</p>`;
+
+            // 2. Sequentially fetch and render each chart
+            for (const chart of chartsToLoad) {
+                const placeholder = document.getElementById(`placeholder-${chart.id}`);
+                try {
+                    const response = await fetch('/generate_python_chart', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ 
+                            chart_type: chart.id, 
+                            x_col: columnName,
+                            theme: currentTheme 
+                        })
+                    });
+
+                    if (!response.ok) { throw new Error(`Server error for ${chart.title}`); }
+                    
+                    const imageBlob = await response.blob();
+                    const imageUrl = URL.createObjectURL(imageBlob);
+                    placeholder.innerHTML = `<img src="${imageUrl}" alt="${chart.title}">`;
+
+                } catch (error) {
+                    if (placeholder) {
+                        placeholder.innerHTML = `<p style="font-size: 12px; color: #ffc107; text-align:center; padding: 5px;">${error.message}</p>`;
+                    }
+                    console.error(`Failed to load chart ${chart.id}:`, error);
+                }
+            }
+        }
+        
+        // --- All existing Chart.js rendering functions remain unchanged ---
+        async function renderChartsForColumn(columnName, columnType) {
+            chartGrid.innerHTML = `<p style="text-align:center; color: #a095c0; grid-column: 1 / -1;">Loading charts for <strong>${columnName}</strong>...</p>`;
+            bivariateSection.style.display = 'none';
+            bivariateChartGrid.innerHTML = '';
+            Object.values(activeCharts).forEach(chart => chart.destroy());
+            activeCharts = {};
+
+            try {
+                if (columnType === 'numeric') {
+                    const response = await fetch(`/get_all_univariate_charts/${encodeURIComponent(columnName)}`);
+                    const data = await response.json();
+                    if (data.error) throw new Error(data.error);
+                    chartGrid.innerHTML = '';
+                    addChartCard('hist-kde', 'Histogram with KDE');
+                    renderHistogramKDE('hist-kde', data.histogram);
+                    addChartCard('cdf', 'Cumulative Distribution (CDF)');
+                    renderCDF('cdf', data.cdf);
+                    addChartCard('strip-plot', 'Strip Plot (Sample)');
+                    renderStripPlot('strip-plot', data.strip_plot);
+                    addChartCard('qq-plot', 'Q-Q Plot (vs. Normal)');
+                    renderQQPlot('qq-plot', data.qq_plot);
+                } else {
+                    const response = await fetch(`/get_visualization_data/${encodeURIComponent(columnName)}`);
+                    const data = await response.json();
+                    if (data.error) throw new Error(data.error);
+                    chartGrid.innerHTML = '';
+                    addChartCard('bar-chart', 'Top 15 Frequencies');
+                    addChartCard('treemap-chart', 'Proportions (Treemap)');
+                    addChartCard('pie-chart', 'Proportions (Pie)');
+                    renderBarChart('bar-chart', data.frequency_chart_data);
+                    renderTreemap('treemap-chart', data.frequency_chart_data);
+                    renderPieChart('pie-chart', data.frequency_chart_data);
+                    addChartCard('radar-chart', 'Frequencies (Radar Chart)');
+                    renderRadarChart('radar-chart', data.frequency_chart_data);
+                }
+                bivariateSection.style.display = 'block';
+                renderBivariateControls(columnName, columnType);
+            } catch (error) {
+                chartGrid.innerHTML = `<p style="color:#ffc107; grid-column: 1 / -1;">Error: ${error.message}</p>`;
+            }
+        }
+        // ... (The rest of the file, including all Chart.js rendering functions, remains identical to the previous version)
+        function renderBivariateControls(col1Name, col1Type) {
+            const numericCols = columnsWithTypes.filter(c => c.type === 'numeric' && c.name !== col1Name);
+            const categoricalCols = columnsWithTypes.filter(c => c.type === 'categorical' && c.name !== col1Name);
+            let controlsHtml = '';
+
+            if (col1Type === 'numeric') {
+                controlsHtml = `<div class="bivariate-controls"><label>Compare <strong>${col1Name}</strong> with (Numeric):</label><select id="scatter-select-y"><option value="">-- Select Y-axis --</option>${numericCols.map(c => `<option value="${c.name}">${c.name}</option>`).join('')}</select><label>Bubble Size (Optional):</label><select id="bubble-select-z"><option value="">-- None --</option>${numericCols.map(c => `<option value="${c.name}">${c.name}</option>`).join('')}</select></div>`;
+            } else if (col1Type === 'categorical') {
+                controlsHtml = `<div class="bivariate-controls"><label>Compare <strong>${col1Name}</strong> with (Categorical):</label><select id="stacked-bar-select-y"><option value="">-- Select grouping column --</option>${categoricalCols.map(c => `<option value="${c.name}">${c.name}</option>`).join('')}</select></div>`;
+            }
+            bivariateControlsContainer.innerHTML = controlsHtml;
+            bivariateChartGrid.innerHTML = '';
+            addBivariateListeners(col1Name, col1Type);
+        }
+
+        function addBivariateListeners(col1Name, col1Type) {
+            if (col1Type === 'numeric') {
+                const ySelect = document.getElementById('scatter-select-y');
+                const zSelect = document.getElementById('bubble-select-z');
+                const handler = () => {
+                    const col2Name = ySelect.value;
+                    const col3Name = zSelect.value;
+                    if (col2Name) renderBivariateChart(col1Name, col2Name, col3Name);
+                };
+                ySelect.addEventListener('change', handler);
+                zSelect.addEventListener('change', handler);
+            } else if (col1Type === 'categorical') {
+                const ySelect = document.getElementById('stacked-bar-select-y');
+                ySelect.addEventListener('change', () => { if (ySelect.value) renderBivariateChart(col1Name, ySelect.value); });
+            }
+        }
+
+        async function renderBivariateChart(col1, col2, col3 = null) {
+            bivariateChartGrid.innerHTML = '<p style="color:#a095c0;">Loading chart...</p>';
+            try {
+                const response = await fetch('/get_bivariate_data', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ col1, col2, col3 }) });
+                const data = await response.json();
+                if (data.error) throw new Error(data.error);
+
+                const bivariateChartId = `bivariate-${col1}-${col2}-${col3 || ''}`;
+                if (activeCharts[bivariateChartId]) activeCharts[bivariateChartId].destroy();
+
+                if (data.scatter_data) {
+                    addBivariateChartCard('scatter', `Scatter: ${col1} vs ${col2}`);
+                    renderScatter('scatter', data.scatter_data, col1, col2);
+                } else if (data.bubble_data) {
+                    addBivariateChartCard('bubble', `Bubble: ${col1} vs ${col2} (Size: ${col3})`);
+                    renderBubble('bubble', data.bubble_data, col1, col2, col3);
+                } else if (data.stacked_bar_data) {
+                    addBivariateChartCard('stacked-bar', `Stacked Bar: ${col1} vs ${col2}`);
+                    renderStackedBar('stacked-bar', data.stacked_bar_data, col1, col2);
+                }
+            } catch (error) {
+                bivariateChartGrid.innerHTML = `<p style="color:#ffc107;">Error: ${error.message}</p>`;
+            }
+        }
+        
+        function addBivariateChartCard(id, title) {
+            bivariateChartGrid.innerHTML = `<div class="chart-card" id="card-bivariate-${id}"><h4 class="chart-title">${title}</h4><canvas id="chart-bivariate-${id}"></canvas></div>`;
+        }
+        
+        function addChartCard(id, title) {
+            const cardHtml = `<div class="chart-card" id="card-${id}"><h4 class="chart-title">${title}</h4><canvas id="chart-${id}"></canvas></div>`;
+            chartGrid.insertAdjacentHTML('beforeend', cardHtml);
+        }
+
+        function calculateKDE(histogramData) {
+            if (!histogramData || histogramData.length === 0) return [];
+            const values = histogramData.map(d => d.y);
+            const smoothedData = [];
+            for (let i = 0; i < values.length; i++) {
+                let sum = 0, count = 0;
+                for (let j = -2; j <= 2; j++) { if (i + j >= 0 && i + j < values.length) { sum += values[i + j]; count++; } }
+                smoothedData.push(sum / count);
+            }
+            return smoothedData;
+        }
+
+        function renderHistogramKDE(id, histogramData) {
+            const ctx = document.getElementById(`chart-${id}`)?.getContext('2d');
+            if (!ctx) return;
+            activeCharts[id] = new Chart(ctx, { type: 'bar', data: { labels: histogramData.map(bin => bin.x.toFixed(2)), datasets: [ { type: 'line', label: 'KDE', data: calculateKDE(histogramData), borderColor: '#ffc107', backgroundColor: 'rgba(255, 193, 7, 0.2)', borderWidth: 2, pointRadius: 0, tension: 0.4, fill: true }, { type: 'bar', label: 'Frequency', data: histogramData.map(bin => bin.y), backgroundColor: '#9D4EDD' } ] }, options: { scales: { x: { ticks: { color: '#a095c0' } }, y: { beginAtZero: true, ticks: { color: '#a095c0' } } }, plugins: { legend: { display: false } } } });
+        }
+        
+        function renderCDF(id, cdfData) {
+            const ctx = document.getElementById(`chart-${id}`)?.getContext('2d');
+            if (!ctx) return;
+            activeCharts[id] = new Chart(ctx, { type: 'line', data: { datasets: [{ label: 'CDF', data: cdfData, borderColor: '#9D4EDD', backgroundColor: 'rgba(157, 78, 221, 0.2)', fill: true, pointRadius: 0 }] }, options: { scales: { x: { type: 'linear', ticks: { color: '#a095c0' } }, y: { min: 0, max: 1, ticks: { color: '#a095c0' } } }, plugins: { legend: { display: false } } } });
+        }
+
+        function renderStripPlot(id, stripData) {
+            const ctx = document.getElementById(`chart-${id}`)?.getContext('2d');
+            if (!ctx) return;
+            activeCharts[id] = new Chart(ctx, { type: 'scatter', data: { datasets: [{ label: 'Data Points', data: stripData.map(value => ({ x: value, y: Math.random() - 0.5 })), backgroundColor: 'rgba(157, 78, 221, 0.6)' }] }, options: { plugins: { legend: { display: false } }, scales: { y: { display: false }, x: { ticks: { color: '#a095c0' } } } } });
+        }
+        
+        function renderQQPlot(id, qqData) {
+            const ctx = document.getElementById(`chart-${id}`)?.getContext('2d');
+            if (!ctx) return;
+            activeCharts[id] = new Chart(ctx, { type: 'scatter', data: { datasets: [{ label: 'Quantiles', data: qqData, backgroundColor: 'rgba(157, 78, 221, 0.6)' }] }, options: { plugins: { legend: { display: false } }, scales: { x: { title: { display: true, text: 'Theoretical Quantiles', color: '#a095c0' }, ticks: { color: '#a095c0' } }, y: { title: { display: true, text: 'Sample Quantiles', color: '#a095c0' }, ticks: { color: '#a095c0' } } } } });
+        }
+
+        function renderBarChart(id, frequencyData) {
+            const ctx = document.getElementById(`chart-${id}`)?.getContext('2d');
+            if (!ctx) return;
+            activeCharts[id] = new Chart(ctx, { type: 'bar', data: { labels: frequencyData.map(item => String(item.category)), datasets: [{ label: 'Count', data: frequencyData.map(item => item.count), backgroundColor: '#9D4EDD' }] }, options: { indexAxis: 'y', plugins: { legend: { display: false } }, scales: { x: { ticks: { color: '#a095c0' } }, y: { ticks: { color: '#a095c0' } } } } });
+        }
+
+        function renderTreemap(id, frequencyData) {
+            const ctx = document.getElementById(`chart-${id}`)?.getContext('2d');
+            if (!ctx) return;
+            const pieColors = ['#9D4EDD', '#7B2CBF', '#5A189A', '#C77DFF', '#3C096C', '#240046', '#E0AAFF'];
+            activeCharts[id] = new Chart(ctx, { type: 'treemap', data: { datasets: [{ label: 'Count', tree: frequencyData.map(item => ({ name: String(item.category), value: item.count })), key: 'value', groups: ['name'], backgroundColor: (c) => { if (c.type !== 'data') return 'transparent'; return pieColors[c.dataIndex % pieColors.length]; }, fontColor: 'white', borderColor: '#161220' }] }, options: { plugins: { legend: { display: false }, tooltip: { callbacks: { label: function(c) { return `${c.raw.g}: ${c.raw.v.toLocaleString()}`; } } } } } });
+        }
+
+        function renderPieChart(id, frequencyData) {
+            const ctx = document.getElementById(`chart-${id}`)?.getContext('2d');
+            if (!ctx) return;
+            const pieColors = ['#9D4EDD', '#7B2CBF', '#5A189A', '#C77DFF', '#3C096C', '#240046', '#E0AAFF'];
+            activeCharts[id] = new Chart(ctx, { type: 'pie', data: { labels: frequencyData.map(item => String(item.category)), datasets: [{ label: 'Count', data: frequencyData.map(item => item.count), backgroundColor: pieColors, borderColor: '#161220', borderWidth: 2 }] }, options: { plugins: { legend: { display: true, position: 'bottom', labels: { color: '#E0D9F0' } } } } });
+        }
+
+        function renderRadarChart(id, frequencyData) {
+            const ctx = document.getElementById(`chart-${id}`)?.getContext('2d');
+            if (!ctx) return;
+            const radarColor = '#9D4EDD';
+            activeCharts[id] = new Chart(ctx, { type: 'radar', data: { labels: frequencyData.map(item => String(item.category)), datasets: [{ label: 'Count', data: frequencyData.map(item => item.count), fill: true, backgroundColor: 'rgba(157, 78, 221, 0.4)', borderColor: radarColor, pointBackgroundColor: radarColor, pointBorderColor: '#fff', pointHoverBackgroundColor: '#fff', pointHoverBorderColor: radarColor }] }, options: { plugins: { legend: { display: false } }, scales: { r: { angleLines: { color: '#4a3f6e' }, grid: { color: '#4a3f6e' }, pointLabels: { color: '#E0D9F0', font: { size: 12 } }, ticks: { color: '#a095c0', backdropColor: 'transparent' } } } } });
+        }
+        
+        function renderScatter(id, data, xKey, yKey) {
+            const ctx = document.getElementById(`chart-bivariate-${id}`)?.getContext('2d');
+            if (!ctx) return;
+            const chartId = `bivariate-${id}`;
+            if (activeCharts[chartId]) activeCharts[chartId].destroy();
+            activeCharts[chartId] = new Chart(ctx, { type: 'scatter', data: { datasets: [{ label: `${xKey} vs ${yKey}`, data: data.map(p => ({x: p[xKey], y: p[yKey]})), backgroundColor: 'rgba(157, 78, 221, 0.6)' }] }, options: { plugins: { legend: { display: false } }, scales: { x: { title: { display: true, text: xKey, color: '#a095c0' }, ticks: { color: '#a095c0' } }, y: { title: { display: true, text: yKey, color: '#a095c0' }, ticks: { color: '#a095c0' } } } } });
+        }
+
+        function renderBubble(id, data, xKey, yKey, zKey) {
+            const ctx = document.getElementById(`chart-bivariate-${id}`)?.getContext('2d');
+            if (!ctx) return;
+            const zData = data.map(p => p[zKey]).filter(v => v !== null);
+            const zMax = Math.max(...zData);
+            const chartId = `bivariate-${id}`;
+            if (activeCharts[chartId]) activeCharts[chartId].destroy();
+            activeCharts[chartId] = new Chart(ctx, { type: 'bubble', data: { datasets: [{ label: zKey, data: data.map(p => ({x: p[xKey], y: p[yKey], r: p[zKey] ? (p[zKey] / zMax) * 20 : 0})), backgroundColor: 'rgba(157, 78, 221, 0.6)' }] }, options: { plugins: { legend: { display: false } }, scales: { x: { title: { display: true, text: xKey, color: '#a095c0' }, ticks: { color: '#a095c0' } }, y: { title: { display: true, text: yKey, color: '#a095c0' }, ticks: { color: '#a095c0' } } } } });
+        }
+
+        function renderStackedBar(id, data, groupKey, stackKey) {
+            const ctx = document.getElementById(`chart-bivariate-${id}`)?.getContext('2d');
+            if (!ctx) return;
+            const groups = [...new Set(data.map(d => d[groupKey]))];
+            const stacks = [...new Set(data.map(d => d[stackKey]))];
+            const pieColors = ['#9D4EDD', '#7B2CBF', '#5A189A', '#C77DFF', '#3C096C', '#240046', '#E0AAFF'];
+            const datasets = stacks.map((stack, index) => ({
+                label: stack,
+                data: groups.map(group => data.find(d => d[groupKey] === group && d[stackKey] === stack)?.count || 0),
+                backgroundColor: pieColors[index % pieColors.length]
+            }));
+            const chartId = `bivariate-${id}`;
+            if (activeCharts[chartId]) activeCharts[chartId].destroy();
+            activeCharts[chartId] = new Chart(ctx, { type: 'bar', data: { labels: groups, datasets: datasets }, options: { plugins: { legend: { labels: { color: '#E0D9F0' } } }, scales: { x: { stacked: true, ticks: { color: '#a095c0' } }, y: { stacked: true, ticks: { color: '#a095c0' } } } } });
+        }
+
+    });
+</script>
+{% endblock %}
