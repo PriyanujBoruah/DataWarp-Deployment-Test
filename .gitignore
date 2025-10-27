@@ -1,0 +1,30 @@
+# --- Secrets ---
+# NEVER commit your environment file with your secret keys.
+.env
+
+# --- Python ---
+# The virtual environment folder. This is huge and specific to your machine.
+.venv/
+venv/
+
+# Python cache files
+__pycache__/
+*.pyc
+
+# --- IDE / Editor Files ---
+# VS Code, PyCharm, etc.
+.vscode/
+.idea/
+
+# --- Temporary Local Data ---
+# Ignore the local folder you use for the SHARED_FOLDER_PATH.
+# Adjust the name if you called it something else.
+local_shared_data/
+
+# --- Build Artifacts ---
+build/
+dist/
+*.egg-info/
+
+# --- Testing Artifacts ---
+.pytest_cache/
